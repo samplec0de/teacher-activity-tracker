@@ -22,16 +22,12 @@ class Course(ABC):
 
     @property
     @abstractmethod
-    async def title(self) -> str:
+    async def name(self) -> str:
         """Название курса"""
         pass
 
-    @title.setter
+    @name.setter
     @abstractmethod
-    async def title(self, value) -> None:
+    async def name(self, value) -> None:
         """Изменить название курса"""
-        pass
-
-    async def generate_join_code(self, ) -> str:
-        """Возвращает одноразовый код, который может использоваться для присоединения к курсу"""
         pass

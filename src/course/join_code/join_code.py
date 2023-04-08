@@ -25,7 +25,7 @@ class CourseJoinCode(ABC):
 
     @property
     @abstractmethod
-    async def course(self) -> Course:
+    async def course(self) -> Optional[Course]:
         """Курс, к которому можно присоединиться по данному коду"""
         pass
 

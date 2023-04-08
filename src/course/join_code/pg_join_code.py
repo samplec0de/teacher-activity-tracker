@@ -17,9 +17,9 @@ class PGCourseJoinCode(PGObject, CourseJoinCode):
         return await self._get_single_attribute('comment')
 
     @property
-    async def course(self) -> PGCourse:
+    async def course(self) -> Optional[PGCourse]:
         course_id = await self._get_single_attribute('course_id')
-        return PGCourse(course_id=course_id, pool=self._pool)
+        return None if course_id is None else PGCourse(course_id=course_id, pool=self._pool)
 
     @property
     async def activated_by(self) -> Optional[PGTeacher]:
@@ -27,21 +27,21 @@ class PGCourseJoinCode(PGObject, CourseJoinCode):
         return None if teacher_id is None else PGTeacher(teacher_id=teacher_id, pool=self._pool)
 
     async def activate(self, teacher: PGTeacher) -> bool:
-        if self.activated_by is not None:
+        if await self.activated_by is not None:
             return False
         teacher_id = teacher.id
 
         async with self._pool.acquire() as conn:
-            await conn.set_autocommit(False)
+            async with conn.transaction():
+                update_query = f'UPDATE course_join_codes SET activated_by_teacher_id=$1 WHERE code_id = $2'
+                await conn.execute(update_query, teacher_id, self._id)
 
-            update_query = f'UPDATE course_join_codes SET activated_by_teacher_id=$1 WHERE code_id = $2'
-            await conn.execute(update_query, teacher_id, self._id)
+                query = f'INSERT INTO teacher_courses (teacher_id, course_id) VALUES ($1, $2);'
+                course = await self.course
+                course_id = course.id
+                teacher_id = teacher.id
+                await conn.execute(query, teacher_id, course_id)
 
-            query = f'INSERT INTO teacher_courses (teacher_id, course_id) VALUES ($1, $2);'
-            course = await self.course
-            course_id = course.id
-            teacher_id = teacher.id
-            await conn.execute(query, teacher_id, course_id)
 
         return True
 

@@ -16,10 +16,13 @@ class PGTeacher(PGObject, Teacher):
     async def registered(self) -> bool:
         return await self._get_single_attribute('teacher_id') is not None
 
-    async def _register(self) -> None:
+    async def register(self) -> None:
+        if await self.registered:
+            return
+
         async with self._pool.acquire() as conn:
             query = f'INSERT INTO teachers (teacher_id) VALUES ($1)'
-            conn.execute(query, self.id)
+            await conn.execute(query, self.id)
 
     @property
     async def courses(self) -> Tuple[PGCourse]:

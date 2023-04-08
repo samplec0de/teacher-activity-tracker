@@ -1,6 +1,9 @@
+from typing import Tuple
+
 import asyncpg
 
 from course.course import Course
+from lesson.lesson import Lesson
 from pg_object import PGObject
 
 
@@ -16,3 +19,11 @@ class PGCourse(PGObject, Course):
     @name.setter
     async def name(self, value):
         await self._set_single_attribute('name', value)
+
+    @property
+    async def lessons(self) -> Tuple[Lesson, ...]:
+        """Список уроков курса"""
+        async with self._pool.acquire() as conn:
+            lessons_query = "SELECT lesson_id FROM lessons WHERE course_id=$1"
+            lessons_qr = await conn.fetchall(lessons_query)
+            return tuple([row['lesson_id'] for row in lessons_qr])

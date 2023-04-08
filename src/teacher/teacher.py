@@ -9,8 +9,6 @@ class Teacher(ABC):
 
     def __init__(self, teacher_id: int):
         self._id = teacher_id
-        if not self.registered:
-            self._register()
 
     @property
     def id(self) -> int:
@@ -24,7 +22,7 @@ class Teacher(ABC):
         pass
 
     @abstractmethod
-    async def _register(self) -> None:
+    async def register(self) -> None:
         """Регистрирует аккаунт"""
         pass
 
