@@ -19,12 +19,12 @@ class Teacher(ABC):
 
     @property
     @abstractmethod
-    def registered(self) -> bool:
+    async def registered(self) -> bool:
         """Проверяет зарегистрирован ли преподаватель"""
         pass
 
     @abstractmethod
-    def _register(self) -> None:
+    async def _register(self) -> None:
         """Регистрирует аккаунт"""
         pass
 
