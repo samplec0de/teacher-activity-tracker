@@ -27,8 +27,8 @@ class PGTeacher(PGObject, Teacher):
     @property
     async def courses(self) -> Tuple[PGCourse]:
         async with self._pool.acquire() as conn:
-            query = f'SELECT course_id FROM teacher_courses WHERE id = $1'
-            teacher_courses = await conn.fetchmany(query, self._id)
+            query = f'SELECT course_id FROM teacher_courses WHERE teacher_id = $1'
+            teacher_courses = await conn.fetch(query, self._id)
             return tuple([PGCourse(course_id=row['course_id'], pool=self._pool) for row in teacher_courses])
 
     @property
