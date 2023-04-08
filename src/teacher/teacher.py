@@ -9,11 +9,24 @@ class Teacher(ABC):
 
     def __init__(self, teacher_id: int):
         self._id = teacher_id
+        if not self.registered:
+            self._register()
 
     @property
     def id(self) -> int:
         """Идентификатор учителя"""
         return self._id
+
+    @property
+    @abstractmethod
+    def registered(self) -> bool:
+        """Проверяет зарегистрирован ли преподаватель"""
+        pass
+
+    @abstractmethod
+    def _register(self) -> None:
+        """Регистрирует аккаунт"""
+        pass
 
     @property
     @abstractmethod
