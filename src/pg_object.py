@@ -19,6 +19,6 @@ class PGObject:
     async def _set_single_attribute(self, attribute_name: str, value):
         """Устанавливает значение 1 атрибута в БД"""
         async with self._pool.acquire() as conn:
-            update_query = f'UPDATE {self._table} SET $1=$2 WHERE {self._id_column_name} = $3'
-            result = await conn.execute(update_query, attribute_name, value, self._id)
+            update_query = f'UPDATE {self._table} SET {attribute_name}=$1 WHERE {self._id_column_name} = $2'
+            result = await conn.execute(update_query, value, self._id)
             return result
