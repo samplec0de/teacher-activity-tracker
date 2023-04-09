@@ -4,6 +4,7 @@ import asyncpg
 
 from course.course import Course
 from lesson.lesson import Lesson
+from lesson.pg_lesson import PGLesson
 from pg_object import PGObject
 
 
@@ -25,5 +26,5 @@ class PGCourse(PGObject, Course):
         """Список уроков курса"""
         async with self._pool.acquire() as conn:
             lessons_query = "SELECT lesson_id FROM lessons WHERE course_id=$1"
-            lessons_qr = await conn.fetchall(lessons_query)
-            return tuple([row['lesson_id'] for row in lessons_qr])
+            lessons_qr = await conn.fetch(lessons_query, self.id)
+            return tuple([PGLesson(row['lesson_id'], pool=self._pool) for row in lessons_qr])

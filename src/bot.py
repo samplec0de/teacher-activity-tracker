@@ -1,15 +1,18 @@
-import asyncio
 import logging
+import re
+from typing import Tuple
 
-import asyncpg
 from aiogram import Bot, Dispatcher, types
 from aiogram.dispatcher.filters import CommandStart
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.utils import executor
 
+from course.course import Course
+from course.course_factory import CourseFactory
 from course.join_code.join_code import CourseJoinCode
 from course.join_code.join_code_factory import CourseJoinCodeFactory
 from database import get_pool
+from lesson.lesson import Lesson
 from teacher.teacher_factory import TeacherFactory
 
 logging.basicConfig(level=logging.INFO)
@@ -20,6 +23,7 @@ dp = Dispatcher(bot)
 
 join_code_factory = None
 teacher_factory = None
+course_factory = None
 
 
 async def get_join_code_factory():
@@ -34,6 +38,13 @@ async def get_teacher_factory():
     if teacher_factory is None:
         teacher_factory = TeacherFactory(pool=await get_pool())
     return teacher_factory
+
+
+async def get_course_factory():
+    global course_factory
+    if course_factory is None:
+        course_factory = CourseFactory(pool=await get_pool())
+    return course_factory
 
 
 @dp.message_handler(CommandStart())
@@ -68,7 +79,7 @@ async def start_command(message: types.Message):
 async def process_my_courses_message(message: types.Message):
     telegram_id = message.from_user.id
     teacher = await (await get_teacher_factory()).load(teacher_id=telegram_id)
-    if not teacher.registered:
+    if not await teacher.registered:
         await message.reply("Пeрeйди по спeциальной ссылкe или ввeди /start КОД_АКТИВАЦИИ")
         return
 
@@ -81,6 +92,25 @@ async def process_my_courses_message(message: types.Message):
 
     await message.reply("Выберите курс", reply_markup=keyboard)
 
+
+@dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data))
+async def process_course_callback(callback_query: CallbackQuery):
+    course_id = int(callback_query.data.split('_')[1])
+    course: Course = await (await get_course_factory()).load(course_id=course_id)
+    course_name: str = await course.name
+
+    keyboard = InlineKeyboardMarkup()
+    lessons: Tuple[Lesson] = await course.lessons
+    for lesson in lessons:
+        lesson_date = await lesson.date
+        lesson_date_str = lesson_date.strftime("%d.%m.%Y")
+        lesson_topic = await lesson.topic
+        lesson_label = f"{lesson_date_str}: {lesson_topic}"
+        button = InlineKeyboardButton(lesson_label, callback_data=f'lesson_{lesson.id}')
+        keyboard.add(button)
+
+    await callback_query.message.reply(text="Выберите урок", reply_markup=keyboard)
+    await callback_query.answer()
 
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=False)
