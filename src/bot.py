@@ -7,12 +7,14 @@ from aiogram.dispatcher.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.utils import executor
 
+from activity.activity import Activity
 from course.course import Course
 from course.course_factory import CourseFactory
 from course.join_code.join_code import CourseJoinCode
 from course.join_code.join_code_factory import CourseJoinCodeFactory
 from database import get_pool
 from lesson.lesson import Lesson
+from lesson.lesson_factory import LessonFactory
 from teacher.teacher_factory import TeacherFactory
 
 logging.basicConfig(level=logging.INFO)
@@ -24,6 +26,7 @@ dp = Dispatcher(bot)
 join_code_factory = None
 teacher_factory = None
 course_factory = None
+lesson_factory = None
 
 
 async def get_join_code_factory():
@@ -45,6 +48,13 @@ async def get_course_factory():
     if course_factory is None:
         course_factory = CourseFactory(pool=await get_pool())
     return course_factory
+
+
+async def get_lesson_factory():
+    global lesson_factory
+    if lesson_factory is None:
+        lesson_factory = LessonFactory(pool=await get_pool())
+    return lesson_factory
 
 
 @dp.message_handler(CommandStart())
@@ -111,6 +121,23 @@ async def process_course_callback(callback_query: CallbackQuery):
 
     await callback_query.message.reply(text="Выберите урок", reply_markup=keyboard)
     await callback_query.answer()
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^lesson_\d+$', c.data))
+async def process_lesson_callback(callback_query: CallbackQuery):
+    lesson_id = int(callback_query.data.split('_')[1])
+    lesson: Lesson = await (await get_lesson_factory()).load(lesson_id=lesson_id)
+
+    keyboard = InlineKeyboardMarkup()
+    activities: Tuple[Activity] = await lesson.activities
+    for activity in activities:
+        activity_topic = await activity.name
+        button = InlineKeyboardButton(activity_topic, callback_data=f'activity_{lesson.id}')
+        keyboard.add(button)
+
+    await callback_query.message.reply(text="Выберите активность", reply_markup=keyboard)
+    await callback_query.answer()
+
 
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=False)

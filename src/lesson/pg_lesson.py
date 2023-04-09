@@ -3,6 +3,7 @@ import datetime
 import asyncpg
 
 from activity.activity import Activity
+from activity.pg_activity import PGActivity
 from lesson.lesson import Lesson
 from pg_object import PGObject
 
@@ -31,6 +32,6 @@ class PGLesson(PGObject, Lesson):
     @property
     async def activities(self) -> tuple[Activity, ...]:
         async with self._pool.acquire() as conn:
-            query = f'SELECT id FROM activities WHERE lesson_id = $1'
+            query = f'SELECT activity_id FROM activities WHERE lesson_id = $1'
             result = await conn.fetch(query, self._id)
-            return tuple([Activity(record['id']) for record in result])
+            return tuple([PGActivity(record['activity_id'], pool=self._pool) for record in result])
