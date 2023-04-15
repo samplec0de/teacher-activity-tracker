@@ -2,9 +2,14 @@ import logging
 import re
 from typing import Tuple
 
+import aiogram.utils.markdown as md
 from aiogram import Bot, Dispatcher, types
-from aiogram.dispatcher.filters import CommandStart
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters import CommandStart, Command
+from aiogram.dispatcher.filters.state import StatesGroup, State
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, \
+    CallbackQuery, Message, ParseMode
 from aiogram.utils import executor
 
 from activity.activity import Activity
@@ -20,13 +25,18 @@ from teacher.teacher_factory import TeacherFactory
 logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token='5952854813:AAFemh5A5MbK_EBZB8p7BBjDnYvWpjav-Eo')
-dp = Dispatcher(bot)
+dp = Dispatcher(bot, storage=MemoryStorage())
 
 
 join_code_factory = None
 teacher_factory = None
 course_factory = None
 lesson_factory = None
+
+
+class AddCourseSG(StatesGroup):
+    get_name = State()
+    get_description = State()
 
 
 async def get_join_code_factory():
@@ -137,6 +147,58 @@ async def process_lesson_callback(callback_query: CallbackQuery):
 
     await callback_query.message.reply(text="Выберите активность", reply_markup=keyboard)
     await callback_query.answer()
+
+
+@dp.message_handler(Command("add_course"))
+async def cmd_add_course(message: Message, state: FSMContext):
+    await message.answer(
+        "Хорошо, давайте добавим новый курс. Если передумаете, пишите /cancel. Как будет называться новый курс?"
+    )
+    await state.set_state(AddCourseSG.get_name)
+
+
+@dp.message_handler(state=AddCourseSG.get_name)
+async def msg_set_course_name(message: Message, state: FSMContext):
+    async with state.proxy() as data:
+        data["course_name"] = message.text
+    await state.set_state(AddCourseSG.get_description)
+
+    keyboard = InlineKeyboardMarkup()
+    button_skip = InlineKeyboardButton("Пропустить", callback_data=f'no_description')
+    keyboard.add(button_skip)
+
+    await message.answer(
+        "Укажите описание курса",
+        reply_markup=keyboard
+    )
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^no_description$', c.data), state=AddCourseSG.get_description)
+async def create_course_no_description(callback_query: CallbackQuery, state: FSMContext):
+    message = callback_query.message
+    async with state.proxy() as data:
+        cf = await get_course_factory()
+        course = await cf.create(name=data["course_name"], description=None)
+        await message.answer(f"Курс {md.hbold(await course.name)} добавлен!", parse_mode=ParseMode.HTML)
+    await callback_query.answer()
+    await state.finish()
+
+
+@dp.message_handler(state=AddCourseSG.get_description)
+async def msg_set_course_desc(message: Message, state: FSMContext):
+    description = message.text
+    async with state.proxy() as data:
+        cf = await get_course_factory()
+        course = await cf.create(name=data["course_name"], description=description)
+        await message.answer(
+            md.text(
+                f"Курс {md.hbold(await course.name)} добавлен, описание:",
+                md.code(description),
+                sep='\n'
+            ),
+            parse_mode=ParseMode.HTML
+        )
+    await state.finish()
 
 
 if __name__ == '__main__':
