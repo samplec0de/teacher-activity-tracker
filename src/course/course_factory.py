@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 
 import asyncpg
 
@@ -22,3 +22,13 @@ class CourseFactory:
     async def load(self, course_id: int) -> Course:
         """Получение курса по id"""
         return PGCourse(course_id=course_id, pool=self._pool)
+
+    async def get_all(self) -> List[Course]:
+        """Получение всех курсов"""
+        async with self._pool.acquire() as conn:
+            query = f'SELECT course_id FROM courses;'
+            course_ids = await conn.fetch(query)
+            courses = []
+            for row in course_ids:
+                courses.append(PGCourse(course_id=row['course_id'], pool=self._pool))
+            return courses

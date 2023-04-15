@@ -14,12 +14,20 @@ class PGLesson(PGObject, Lesson):
         Lesson.__init__(self, lesson_id=lesson_id)
 
     @property
-    async def date(self) -> datetime.datetime:
-        return await self._get_single_attribute('date')
+    async def date_from(self) -> datetime.datetime:
+        return await self._get_single_attribute('date_from')
 
-    @date.setter
-    async def date(self, value) -> None:
-        await self._set_single_attribute('date', value)
+    @date_from.setter
+    async def date_from(self, value) -> None:
+        await self._set_single_attribute('date_from', value)
+
+    @property
+    async def date_to(self) -> datetime.datetime:
+        return await self._get_single_attribute('date_to')
+
+    @date_to.setter
+    async def date_to(self, value) -> None:
+        await self._set_single_attribute('date_to', value)
 
     @property
     async def topic(self) -> str:
@@ -35,3 +43,9 @@ class PGLesson(PGObject, Lesson):
             query = f'SELECT activity_id FROM activities WHERE lesson_id = $1'
             result = await conn.fetch(query, self._id)
             return tuple([PGActivity(record['activity_id'], pool=self._pool) for record in result])
+
+    @property
+    async def course(self) -> 'PGCourse':
+        course_id = await self._get_single_attribute('course_id')
+        from course.pg_course import PGCourse
+        return PGCourse(course_id=course_id, pool=self._pool)

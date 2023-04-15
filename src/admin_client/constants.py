@@ -1,0 +1,2 @@
+PERIOD_DELIMITER = '-'
+DATE_FORMAT = '%d.%m.%Y'

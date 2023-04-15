@@ -31,3 +31,8 @@ class Course(ABC):
     async def name(self, value) -> None:
         """Изменить название курса"""
         pass
+
+    @property
+    async def name_quoted(self) -> str:
+        """Название курса в кавычках"""
+        return f'"{await self.name}"'

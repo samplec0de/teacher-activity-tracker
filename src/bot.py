@@ -1,3 +1,4 @@
+import datetime
 import logging
 import re
 from typing import Tuple
@@ -12,6 +13,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
     CallbackQuery, Message, ParseMode
 from aiogram.utils import executor
 
+import admin_client
 from activity.activity import Activity
 from course.course import Course
 from course.course_factory import CourseFactory
@@ -37,6 +39,12 @@ lesson_factory = None
 class AddCourseSG(StatesGroup):
     get_name = State()
     get_description = State()
+
+
+class AddLessonSG(StatesGroup):
+    choose_course = State()
+    choose_topic = State()
+    choose_period = State()
 
 
 async def get_join_code_factory():
@@ -149,6 +157,12 @@ async def process_lesson_callback(callback_query: CallbackQuery):
     await callback_query.answer()
 
 
+@dp.message_handler(Command("cancel"), state='*')
+async def cmd_add_course(message: Message, state: FSMContext):
+    await message.answer("Галя, отмена!")
+    await state.finish()
+
+
 @dp.message_handler(Command("add_course"))
 async def cmd_add_course(message: Message, state: FSMContext):
     await message.answer(
@@ -198,6 +212,124 @@ async def msg_set_course_desc(message: Message, state: FSMContext):
             ),
             parse_mode=ParseMode.HTML
         )
+    await state.finish()
+
+
+@dp.message_handler(Command("add_lesson"))
+async def cmd_add_lesson(message: Message, state: FSMContext):
+    """Команда добавления курса"""
+    keyboard = InlineKeyboardMarkup()
+    cf = await get_course_factory()
+    courses = await cf.get_all()
+    for course in courses:
+        course_name = await course.name
+        button = InlineKeyboardButton(course_name, callback_data=f'course_{course.id}')
+        keyboard.add(button)
+
+    await message.reply("Выберите курс, в который хотите добавить урок", reply_markup=keyboard)
+    await state.set_state(AddLessonSG.choose_course)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=AddLessonSG.choose_course)
+async def callback_add_lesson_choose_course(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь выбрал курс, предложить указать тему"""
+    course_id = int(callback_query.data.split('_')[1])
+    async with state.proxy() as data:
+        data["course_id"] = course_id
+
+    keyboard = InlineKeyboardMarkup()
+    button_skip = InlineKeyboardButton("Не указывать", callback_data=f'no_topic')
+    keyboard.add(button_skip)
+
+    await callback_query.message.reply(text="Какая тема будет у нового урока?", reply_markup=keyboard)
+    await callback_query.answer()
+
+    await state.set_state(AddLessonSG.choose_topic)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^no_topic$', c.data), state=AddLessonSG.choose_topic)
+async def callback_add_lesson_no_topic(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь решил не указывать тему для урока, предлагаем выбрать период"""
+    async with state.proxy() as data:
+        data["lesson_topic"] = None
+
+    message = callback_query.message
+    await message.answer(admin_client.messages.SET_PERIOD_SUGGESTION, parse_mode=ParseMode.HTML)
+    await callback_query.answer()
+
+    await state.set_state(AddLessonSG.choose_period)
+
+
+@dp.message_handler(state=AddLessonSG.choose_topic)
+async def msg_set_lesson_topic(message: Message, state: FSMContext):
+    """Пользователь прислал тему урока, предлагаем выбрать период"""
+    async with state.proxy() as data:
+        data["lesson_topic"] = message.text
+
+    await message.answer(admin_client.messages.SET_PERIOD_SUGGESTION, parse_mode=ParseMode.HTML)
+
+    await state.set_state(AddLessonSG.choose_period)
+
+
+@dp.message_handler(state=AddLessonSG.choose_period)
+async def msg_set_lesson_period(message: Message, state: FSMContext):
+    """Пользователь прислал период сбора активности по курсу"""
+    async with state.proxy() as data:
+        dates = re.sub(r"\s", '', message.text).split(admin_client.constants.PERIOD_DELIMITER)
+        if len(dates) < 2:
+            await message.answer(
+                "❗ К сожалению, мне не удалось распознать период. Возможно, вы забыли знак минуса между датами или "
+                "написали только одну дату. Пожалуйста, попробуйте заново. "
+                f"Укажите {md.hbold('2')} даты в формате ДД.ММ.ГГГГ, разделенные знаком минуса, например "
+                f"{md.hcode('10.03.2023-15.03.2023')}",
+                parse_mode=ParseMode.HTML
+            )
+        elif len(dates) > 2:
+            await message.answer(
+                "❗ К сожалению, мне не удалось распознать период. Ваше сообщение содержит больше одного знака минуса. "
+                "Пожалуйста, попробуйте заново. "
+                f"Укажите {md.hbold('2')} даты в формате ДД.ММ.ГГГГ, разделенные знаком минуса, например "
+                f"{md.hcode('10.03.2023-15.03.2023')}",
+                parse_mode=ParseMode.HTML
+            )
+        else:
+            dates_parsed = []
+            for date, date_kind in zip(dates, ("начала", "конца")):
+                try:
+                    dates_parsed.append(datetime.datetime.strptime(date, admin_client.constants.DATE_FORMAT))
+                except ValueError:
+                    await message.answer(
+                        f"❗ К сожалению, мне не удалось распознать дату {date_kind} \"{date}\" "
+                        "Пожалуйста, попробуйте указать период заново. Обратите внимание - формат даты ДД.ММ.ГГГГ. "
+                        f"Например, {md.hcode('10.03.2023-15.03.2023')}",
+                        parse_mode=ParseMode.HTML
+                    )
+                    return
+            if dates_parsed[1] < dates_parsed[0]:
+                await message.answer(
+                    f"❗ Дата завершения раньше даты начала, укажите период заново!",
+                    parse_mode=ParseMode.HTML
+                )
+                return
+            data["lesson_dates"] = dates_parsed
+
+        lf = await get_lesson_factory()
+        date_from, date_to = data["lesson_dates"]
+        new_lesson = await lf.create(
+            course_id=data["course_id"], topic=data["lesson_topic"], date_from=date_from, date_to=date_to
+        )
+        await message.answer(
+            "📚 Урок создан успешно.\n"
+            f"▪ Курс - {md.hitalic(await (await new_lesson.course).name_quoted)}\n"
+            f"▪ Тема - {md.hitalic(await new_lesson.topic_quoted or 'НЕ УКАЗАНА')}\n"
+            f"▪ Сбор активности с "
+            f"{md.hunderline((await new_lesson.date_from).strftime(admin_client.constants.DATE_FORMAT))} "
+            f"до "
+            f"{md.hunderline((await new_lesson.date_to).strftime(admin_client.constants.DATE_FORMAT))} "
+            f"(обе даты включительно)",
+            parse_mode=ParseMode.HTML
+        )
+
     await state.finish()
 
 
