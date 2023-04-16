@@ -15,6 +15,7 @@ from aiogram.utils import executor
 
 import admin_client
 from activity.activity import Activity
+from activity.activity_factory import ActivityFactory
 from course.course import Course
 from course.course_factory import CourseFactory
 from course.join_code.join_code import CourseJoinCode
@@ -34,6 +35,7 @@ join_code_factory = None
 teacher_factory = None
 course_factory = None
 lesson_factory = None
+activity_factory = None
 
 
 class AddCourseSG(StatesGroup):
@@ -45,6 +47,12 @@ class AddLessonSG(StatesGroup):
     choose_course = State()
     choose_topic = State()
     choose_period = State()
+
+
+class AddActivitySG(StatesGroup):
+    choose_course = State()
+    choose_lesson = State()
+    choose_name = State()
 
 
 async def get_join_code_factory():
@@ -73,6 +81,13 @@ async def get_lesson_factory():
     if lesson_factory is None:
         lesson_factory = LessonFactory(pool=await get_pool())
     return lesson_factory
+
+
+async def get_activity_factory():
+    global activity_factory
+    if activity_factory is None:
+        activity_factory = ActivityFactory(pool=await get_pool())
+    return activity_factory
 
 
 @dp.message_handler(CommandStart())
@@ -125,12 +140,11 @@ async def process_my_courses_message(message: types.Message):
 async def process_course_callback(callback_query: CallbackQuery):
     course_id = int(callback_query.data.split('_')[1])
     course: Course = await (await get_course_factory()).load(course_id=course_id)
-    course_name: str = await course.name
 
     keyboard = InlineKeyboardMarkup()
     lessons: Tuple[Lesson] = await course.lessons
     for lesson in lessons:
-        lesson_date = await lesson.date
+        lesson_date = await lesson.date_from
         lesson_date_str = lesson_date.strftime("%d.%m.%Y")
         lesson_topic = await lesson.topic
         lesson_label = f"{lesson_date_str}: {lesson_topic}"
@@ -207,7 +221,7 @@ async def msg_set_course_desc(message: Message, state: FSMContext):
         await message.answer(
             md.text(
                 f"Курс {md.hbold(await course.name)} добавлен, описание:",
-                md.code(description),
+                md.hcode(description),
                 sep='\n'
             ),
             parse_mode=ParseMode.HTML
@@ -326,6 +340,80 @@ async def msg_set_lesson_period(message: Message, state: FSMContext):
             f"{md.hunderline((await new_lesson.date_from).strftime(admin_client.constants.DATE_FORMAT))} "
             f"до "
             f"{md.hunderline((await new_lesson.date_to).strftime(admin_client.constants.DATE_FORMAT))} "
+            f"(обе даты включительно)",
+            parse_mode=ParseMode.HTML
+        )
+
+    await state.finish()
+
+
+@dp.message_handler(Command("add_activity"))
+async def cmd_add_activity(message: Message, state: FSMContext):
+    """Команда добавления активности"""
+    keyboard = InlineKeyboardMarkup()
+    cf = await get_course_factory()
+    courses = await cf.get_all()
+    for course in courses:
+        course_name = await course.name
+        button = InlineKeyboardButton(course_name, callback_data=f'course_{course.id}')
+        keyboard.add(button)
+
+    await message.reply("Выберите курс, в который хотите добавить активность", reply_markup=keyboard)
+    await state.set_state(AddActivitySG.choose_course)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=AddActivitySG.choose_course)
+async def callback_add_course_choosed(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь выбрал курс в процессе добавления активности"""
+    course_id = int(callback_query.data.split('_')[1])
+    course: Course = await (await get_course_factory()).load(course_id=course_id)
+
+    keyboard = InlineKeyboardMarkup()
+    lessons: Tuple[Lesson] = await course.lessons
+    for lesson in lessons:
+        lesson_date = await lesson.date_from
+        lesson_date_str = lesson_date.strftime("%d.%m.%Y")
+        lesson_topic = await lesson.topic
+        lesson_label = f"{lesson_date_str}: {lesson_topic}"
+        button = InlineKeyboardButton(lesson_label, callback_data=f'lesson_{lesson.id}')
+        keyboard.add(button)
+
+    await callback_query.message.reply(text="Выберите урок", reply_markup=keyboard)
+    await callback_query.answer()
+
+    await state.set_state(AddActivitySG.choose_lesson)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^lesson_\d+$', c.data), state=AddActivitySG.choose_lesson)
+async def callback_add_course_lesson_choosed(callback_query: CallbackQuery, state: FSMContext):
+    lesson_id = int(callback_query.data.split('_')[1])
+
+    async with state.proxy() as data:
+        data["new_activity_lesson_id"] = lesson_id
+
+    await callback_query.message.reply(text="Какое будет название у новой активности?")
+    await callback_query.answer()
+
+    await state.set_state(AddActivitySG.choose_name)
+
+
+@dp.message_handler(state=AddActivitySG.choose_name)
+async def msg_set_activity_name(message: Message, state: FSMContext):
+    """Пользователь прислал имя новой активности"""
+    activity_name = message.text
+    async with state.proxy() as data:
+        af = await get_activity_factory()
+        activity = await af.create(name=activity_name, lesson_id=data["new_activity_lesson_id"])
+        lesson = await activity.lesson
+        await message.answer(
+            "📚 Активность создана успешно.\n"
+            f"▪ Курс - {md.hitalic(await (await activity.course).name_quoted)}\n"
+            f"▪ Тема урока - {md.hitalic(await lesson.topic_quoted or 'НЕ УКАЗАНА')}\n"
+            f"▪ Активность - {md.hitalic(await activity.name_quoted)}\n"
+            f"▪ Сбор активности с "
+            f"{md.hunderline((await lesson.date_from).strftime(admin_client.constants.DATE_FORMAT))} "
+            f"до "
+            f"{md.hunderline((await lesson.date_to).strftime(admin_client.constants.DATE_FORMAT))} "
             f"(обе даты включительно)",
             parse_mode=ParseMode.HTML
         )
