@@ -9,7 +9,7 @@ from teacher.teacher import Teacher
 
 class CourseJoinCode(ABC):
     """Код, который может использовать Teacher для подключения к курсу"""
-    def __init__(self, code: Optional[str]):
+    def __init__(self, code: Optional[str] = None):
         self._code = code or self._generate_str()
 
     @property
@@ -22,6 +22,14 @@ class CourseJoinCode(ABC):
     async def comment(self) -> str:
         """Комментарий, оставленный к коду при создании"""
         pass
+
+    @property
+    async def comment_quoted(self) -> str:
+        """Комментарий, оставленный к коду при создании. В кавычках"""
+        comment = await self.comment
+        if comment is None:
+            return None
+        return f'"{comment}"'
 
     @property
     @abstractmethod

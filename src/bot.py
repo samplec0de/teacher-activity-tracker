@@ -55,6 +55,11 @@ class AddActivitySG(StatesGroup):
     choose_name = State()
 
 
+class AddJoinCodeSG(StatesGroup):
+    choose_course = State()
+    choose_description = State()
+
+
 async def get_join_code_factory():
     global join_code_factory
     if join_code_factory is None:
@@ -417,6 +422,95 @@ async def msg_set_activity_name(message: Message, state: FSMContext):
             f"(обе даты включительно)",
             parse_mode=ParseMode.HTML
         )
+
+    await state.finish()
+
+
+@dp.message_handler(Command("add_code"))
+async def cmd_add_join_code(message: Message, state: FSMContext):
+    """Команда добавления кода подключения к курсу"""
+    keyboard = InlineKeyboardMarkup()
+    cf = await get_course_factory()
+    courses = await cf.get_all()
+    for course in courses:
+        course_name = await course.name
+        button = InlineKeyboardButton(course_name, callback_data=f'course_{course.id}')
+        keyboard.add(button)
+
+    await message.reply("Выберите курс для создания кода подключения:", reply_markup=keyboard)
+    await state.set_state(AddJoinCodeSG.choose_course)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=AddJoinCodeSG.choose_course)
+async def callback_add_join_code_course_chosen(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь выбрал курс для создания одноразового кода, предлагает задать комментарий к новому коду"""
+    course_id = int(callback_query.data.split('_')[1])
+    async with state.proxy() as data:
+        data["new_join_code_course_id"] = course_id
+
+    keyboard = InlineKeyboardMarkup()
+    button_skip = InlineKeyboardButton("Не указывать", callback_data=f'no_comment')
+    keyboard.add(button_skip)
+
+    await callback_query.message.reply(
+        "Укажите примечание к коду. Например, можете написать кому планируете отправить этот код, "
+        f"чтобы в будущем понять кто не подключился к курсу. Примечание {md.hbold('не будет')} видно преподавателю.",
+        reply_markup=keyboard,
+        parse_mode=ParseMode.HTML
+    )
+    await callback_query.answer()
+
+    await state.set_state(AddJoinCodeSG.choose_description)
+
+
+async def create_code(message: Message, state: FSMContext):
+    async with state.proxy() as data:
+        cf = await get_course_factory()
+        course = await cf.load(course_id=data["new_join_code_course_id"])
+        code_f = await get_join_code_factory()
+        new_code = await code_f.create(course=course, comment=data["new_join_code_comment"])
+
+    await message.answer(
+        "📚 Код создан успешно.\n"
+        f"▪ Курс - {md.hitalic(await course.name_quoted)}\n"
+        f"▪ Код - {md.hcode(new_code.code)}\n"
+        f"▪ Примечание - {md.hitalic(await new_code.comment_quoted or 'НЕ УКАЗАНО')}\n"
+        f"Вы можете отправить преподавателю код для подключения или переслать следующее сообщение со специальной "
+        f"ссылкой, по которой можно подключиться к курсу.",
+        parse_mode=ParseMode.HTML
+    )
+
+    bot_info = await dp.bot.get_me()
+    magic_link = f"https://t.me/{bot_info.username}?start={new_code.code}"
+
+    await message.answer(
+        f"Для подключения к курсу {await course.name_quoted} нажмите -> {md.hlink('ПОДКЛЮЧИТЬСЯ', magic_link)}",
+        parse_mode=ParseMode.HTML
+    )
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^no_comment$', c.data), state=AddJoinCodeSG.choose_description)
+async def callback_add_join_code_no_description(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь решил не указывать тему для урока, предлагаем выбрать период"""
+    async with state.proxy() as data:
+        data["new_join_code_comment"] = None
+
+    message = callback_query.message
+
+    await create_code(message=message, state=state)
+
+    await callback_query.answer()
+
+    await state.finish()
+
+
+@dp.message_handler(state=AddJoinCodeSG.choose_description)
+async def msg_set_join_code_description(message: Message, state: FSMContext):
+    """Пользователь прислал примечание к новому коду"""
+    async with state.proxy() as data:
+        data["new_join_code_comment"] = message.text
+
+    await create_code(message=message, state=state)
 
     await state.finish()
 

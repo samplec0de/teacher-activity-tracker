@@ -1,5 +1,6 @@
 from typing import Optional
 
+from course.course import Course
 from course.join_code.join_code import CourseJoinCode
 from course.pg_course import PGCourse
 from pg_object import PGObject
@@ -8,7 +9,7 @@ from teacher.pg_teacher import PGTeacher
 
 class PGCourseJoinCode(PGObject, CourseJoinCode):
 
-    def __init__(self, pool, code: Optional[str]):
+    def __init__(self, pool, code: Optional[str] = None):
         CourseJoinCode.__init__(self, code=code)
         PGObject.__init__(self, object_id=self.code, pool=pool, table='course_join_codes', id_column_name='code_id')
 
@@ -45,7 +46,7 @@ class PGCourseJoinCode(PGObject, CourseJoinCode):
 
         return True
 
-    async def issue(self, course: PGCourse, comment: Optional[str] = None) -> None:
+    async def issue(self, course: Course, comment: Optional[str] = None) -> None:
         async with self._pool.acquire() as conn:
             query = f'INSERT INTO course_join_codes (code_id, course_id, comment) VALUES ($1, $2, $3);'
             course_id = course.id
