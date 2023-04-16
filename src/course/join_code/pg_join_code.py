@@ -43,7 +43,6 @@ class PGCourseJoinCode(PGObject, CourseJoinCode):
                 teacher_id = teacher.id
                 await conn.execute(query, teacher_id, course_id)
 
-
         return True
 
     async def issue(self, course: Course, comment: Optional[str] = None) -> None:

@@ -39,56 +39,65 @@ activity_factory = None
 
 
 class AddCourseSG(StatesGroup):
+    """Группа состояний aiogram процесса добавления курса"""
     get_name = State()
     get_description = State()
 
 
 class AddLessonSG(StatesGroup):
+    """Группа состояний aiogram процесса добавления урока в курс"""
     choose_course = State()
     choose_topic = State()
     choose_period = State()
 
 
 class AddActivitySG(StatesGroup):
+    """Группа состояний aiogram процесса добавления активности в урок по курсу"""
     choose_course = State()
     choose_lesson = State()
     choose_name = State()
 
 
 class AddJoinCodeSG(StatesGroup):
+    """Группа состояний aiogram процесса добавления кода подключения к курсу"""
     choose_course = State()
     choose_description = State()
 
 
-async def get_join_code_factory():
+async def get_join_code_factory() -> CourseJoinCodeFactory:
+    """Фабрика одноразовых кодов подключения к курсу"""
     global join_code_factory
     if join_code_factory is None:
         join_code_factory = CourseJoinCodeFactory(pool=await get_pool())
     return join_code_factory
 
 
-async def get_teacher_factory():
+async def get_teacher_factory() -> TeacherFactory:
+    """Фабрика учителей"""
     global teacher_factory
     if teacher_factory is None:
         teacher_factory = TeacherFactory(pool=await get_pool())
     return teacher_factory
 
 
-async def get_course_factory():
+async def get_course_factory() -> CourseFactory:
+    """Фабрика курсов"""
     global course_factory
     if course_factory is None:
         course_factory = CourseFactory(pool=await get_pool())
     return course_factory
 
 
-async def get_lesson_factory():
+async def get_lesson_factory() -> LessonFactory:
+    """Фабрика уроков"""
     global lesson_factory
     if lesson_factory is None:
         lesson_factory = LessonFactory(pool=await get_pool())
     return lesson_factory
 
 
-async def get_activity_factory():
+async def get_activity_factory() -> ActivityFactory:
+    """Фабрика активностей"""
     global activity_factory
     if activity_factory is None:
         activity_factory = ActivityFactory(pool=await get_pool())
@@ -97,6 +106,9 @@ async def get_activity_factory():
 
 @dp.message_handler(CommandStart())
 async def start_command(message: types.Message):
+    """Обработка команды /start, перехода по ссылке подключения и нажатия на кнопку запуска бота.
+    Функционал подключения к курсу.
+    """
     parameter_value = message.get_args()
     if parameter_value:
         join_code: CourseJoinCode = await (await get_join_code_factory()).load(code=parameter_value)
@@ -124,7 +136,8 @@ async def start_command(message: types.Message):
 
 
 @dp.message_handler(text='Мои курсы')
-async def process_my_courses_message(message: types.Message):
+async def msg_my_courses(message: types.Message):
+    """Обработка сообщения "Мои курсы" для запроса списка курсов и последующей отметки активности"""
     telegram_id = message.from_user.id
     teacher = await (await get_teacher_factory()).load(teacher_id=telegram_id)
     if not await teacher.registered:
@@ -142,7 +155,8 @@ async def process_my_courses_message(message: types.Message):
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data))
-async def process_course_callback(callback_query: CallbackQuery):
+async def callback_mark_activity_choose_course(callback_query: CallbackQuery):
+    """Обработчик кнопки выбора курса для отметки активности"""
     course_id = int(callback_query.data.split('_')[1])
     course: Course = await (await get_course_factory()).load(course_id=course_id)
 
@@ -161,7 +175,8 @@ async def process_course_callback(callback_query: CallbackQuery):
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^lesson_\d+$', c.data))
-async def process_lesson_callback(callback_query: CallbackQuery):
+async def callback_mark_activity_choose_lesson(callback_query: CallbackQuery):
+    """Обработчик кнопки выбора урока для отметки активности"""
     lesson_id = int(callback_query.data.split('_')[1])
     lesson: Lesson = await (await get_lesson_factory()).load(lesson_id=lesson_id)
 
@@ -178,12 +193,14 @@ async def process_lesson_callback(callback_query: CallbackQuery):
 
 @dp.message_handler(Command("cancel"), state='*')
 async def cmd_add_course(message: Message, state: FSMContext):
+    """Обработчик команды отмены, работает из любого состояния"""
     await message.answer("Галя, отмена!")
     await state.finish()
 
 
 @dp.message_handler(Command("add_course"))
 async def cmd_add_course(message: Message, state: FSMContext):
+    """Обработчик команды добавления курса /add_course"""
     await message.answer(
         "Хорошо, давайте добавим новый курс. Если передумаете, пишите /cancel. Как будет называться новый курс?"
     )
@@ -192,6 +209,7 @@ async def cmd_add_course(message: Message, state: FSMContext):
 
 @dp.message_handler(state=AddCourseSG.get_name)
 async def msg_set_course_name(message: Message, state: FSMContext):
+    """Обработчик сообщения с названием курса процесса создания курса"""
     async with state.proxy() as data:
         data["course_name"] = message.text
     await state.set_state(AddCourseSG.get_description)
@@ -208,6 +226,7 @@ async def msg_set_course_name(message: Message, state: FSMContext):
 
 @dp.callback_query_handler(lambda c: re.match(r'^no_description$', c.data), state=AddCourseSG.get_description)
 async def create_course_no_description(callback_query: CallbackQuery, state: FSMContext):
+    """Обработчик нажатия кнопки "Пропустить", ветка, где курс создается без описания процесса создания курса"""
     message = callback_query.message
     async with state.proxy() as data:
         cf = await get_course_factory()
@@ -219,6 +238,7 @@ async def create_course_no_description(callback_query: CallbackQuery, state: FSM
 
 @dp.message_handler(state=AddCourseSG.get_description)
 async def msg_set_course_desc(message: Message, state: FSMContext):
+    """Обработчик сообщения с описанием нового курса процесса создания курса"""
     description = message.text
     async with state.proxy() as data:
         cf = await get_course_factory()
@@ -236,7 +256,7 @@ async def msg_set_course_desc(message: Message, state: FSMContext):
 
 @dp.message_handler(Command("add_lesson"))
 async def cmd_add_lesson(message: Message, state: FSMContext):
-    """Команда добавления курса"""
+    """Команда добавления урока /add_lesson"""
     keyboard = InlineKeyboardMarkup()
     cf = await get_course_factory()
     courses = await cf.get_all()
@@ -251,7 +271,7 @@ async def cmd_add_lesson(message: Message, state: FSMContext):
 
 @dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=AddLessonSG.choose_course)
 async def callback_add_lesson_choose_course(callback_query: CallbackQuery, state: FSMContext):
-    """Пользователь выбрал курс, предложить указать тему"""
+    """Обработчик кнопки выбора курса в процессе добавления урока"""
     course_id = int(callback_query.data.split('_')[1])
     async with state.proxy() as data:
         data["course_id"] = course_id
@@ -268,7 +288,7 @@ async def callback_add_lesson_choose_course(callback_query: CallbackQuery, state
 
 @dp.callback_query_handler(lambda c: re.match(r'^no_topic$', c.data), state=AddLessonSG.choose_topic)
 async def callback_add_lesson_no_topic(callback_query: CallbackQuery, state: FSMContext):
-    """Пользователь решил не указывать тему для урока, предлагаем выбрать период"""
+    """Обработчик кнопки "Не указывать" [тему] для урока в процессе создания урока, предлагаем выбрать период"""
     async with state.proxy() as data:
         data["lesson_topic"] = None
 
@@ -281,7 +301,7 @@ async def callback_add_lesson_no_topic(callback_query: CallbackQuery, state: FSM
 
 @dp.message_handler(state=AddLessonSG.choose_topic)
 async def msg_set_lesson_topic(message: Message, state: FSMContext):
-    """Пользователь прислал тему урока, предлагаем выбрать период"""
+    """Обработчик темы прислал урока в процессе создания урока, предлагаем выбрать период"""
     async with state.proxy() as data:
         data["lesson_topic"] = message.text
 
@@ -292,7 +312,7 @@ async def msg_set_lesson_topic(message: Message, state: FSMContext):
 
 @dp.message_handler(state=AddLessonSG.choose_period)
 async def msg_set_lesson_period(message: Message, state: FSMContext):
-    """Пользователь прислал период сбора активности по курсу"""
+    """Пользователь прислал период сбора активности по уроку"""
     async with state.proxy() as data:
         dates = re.sub(r"\s", '', message.text).split(admin_client.constants.PERIOD_DELIMITER)
         if len(dates) < 2:
@@ -354,7 +374,7 @@ async def msg_set_lesson_period(message: Message, state: FSMContext):
 
 @dp.message_handler(Command("add_activity"))
 async def cmd_add_activity(message: Message, state: FSMContext):
-    """Команда добавления активности"""
+    """Команда добавления активности /add_activity"""
     keyboard = InlineKeyboardMarkup()
     cf = await get_course_factory()
     courses = await cf.get_all()
@@ -390,7 +410,8 @@ async def callback_add_course_choosed(callback_query: CallbackQuery, state: FSMC
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^lesson_\d+$', c.data), state=AddActivitySG.choose_lesson)
-async def callback_add_course_lesson_choosed(callback_query: CallbackQuery, state: FSMContext):
+async def callback_add_activity_lesson_choosed(callback_query: CallbackQuery, state: FSMContext):
+    """Обработчик выбора урока в процессе добавления активности"""
     lesson_id = int(callback_query.data.split('_')[1])
 
     async with state.proxy() as data:
@@ -404,7 +425,7 @@ async def callback_add_course_lesson_choosed(callback_query: CallbackQuery, stat
 
 @dp.message_handler(state=AddActivitySG.choose_name)
 async def msg_set_activity_name(message: Message, state: FSMContext):
-    """Пользователь прислал имя новой активности"""
+    """Обработчик имени активности в процессе добавления новой активности"""
     activity_name = message.text
     async with state.proxy() as data:
         af = await get_activity_factory()
@@ -428,7 +449,7 @@ async def msg_set_activity_name(message: Message, state: FSMContext):
 
 @dp.message_handler(Command("add_code"))
 async def cmd_add_join_code(message: Message, state: FSMContext):
-    """Команда добавления кода подключения к курсу"""
+    """Команда добавления кода подключения к курсу /add_code"""
     keyboard = InlineKeyboardMarkup()
     cf = await get_course_factory()
     courses = await cf.get_all()
