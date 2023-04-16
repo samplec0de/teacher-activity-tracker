@@ -16,6 +16,7 @@ from aiogram.utils import executor
 import admin_client
 from activity.activity import Activity
 from activity.activity_factory import ActivityFactory
+from activity.record.pg_activity_record_factory import ActivityRecordFactory
 from course.course import Course
 from course.course_factory import CourseFactory
 from course.join_code.join_code import CourseJoinCode
@@ -23,6 +24,7 @@ from course.join_code.join_code_factory import CourseJoinCodeFactory
 from database import get_pool
 from lesson.lesson import Lesson
 from lesson.lesson_factory import LessonFactory
+from teacher.teacher import Teacher
 from teacher.teacher_factory import TeacherFactory
 
 logging.basicConfig(level=logging.INFO)
@@ -36,6 +38,16 @@ teacher_factory = None
 course_factory = None
 lesson_factory = None
 activity_factory = None
+activity_record_factory = None
+
+
+class MarkActivitySG(StatesGroup):
+    """Группа состояний aiogram процесса отметки активности"""
+    choose_course = State()
+    choose_lesson = State()
+    choose_activity = State()
+    choose_comment = State()
+    choose_hours = State()
 
 
 class AddCourseSG(StatesGroup):
@@ -104,6 +116,14 @@ async def get_activity_factory() -> ActivityFactory:
     return activity_factory
 
 
+async def get_activity_record_factory() -> ActivityRecordFactory:
+    """Фабрика записей активности"""
+    global activity_record_factory
+    if activity_record_factory is None:
+        activity_record_factory = ActivityRecordFactory(pool=await get_pool())
+    return activity_record_factory
+
+
 @dp.message_handler(CommandStart())
 async def start_command(message: types.Message):
     """Обработка команды /start, перехода по ссылке подключения и нажатия на кнопку запуска бота.
@@ -136,7 +156,7 @@ async def start_command(message: types.Message):
 
 
 @dp.message_handler(text='Мои курсы')
-async def msg_my_courses(message: types.Message):
+async def msg_my_courses(message: types.Message, state: FSMContext):
     """Обработка сообщения "Мои курсы" для запроса списка курсов и последующей отметки активности"""
     telegram_id = message.from_user.id
     teacher = await (await get_teacher_factory()).load(teacher_id=telegram_id)
@@ -153,9 +173,11 @@ async def msg_my_courses(message: types.Message):
 
     await message.reply("Выберите курс", reply_markup=keyboard)
 
+    await state.set_state(MarkActivitySG.choose_course)
 
-@dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data))
-async def callback_mark_activity_choose_course(callback_query: CallbackQuery):
+
+@dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=MarkActivitySG.choose_course)
+async def callback_mark_activity_choose_course(callback_query: CallbackQuery, state: FSMContext):
     """Обработчик кнопки выбора курса для отметки активности"""
     course_id = int(callback_query.data.split('_')[1])
     course: Course = await (await get_course_factory()).load(course_id=course_id)
@@ -173,9 +195,11 @@ async def callback_mark_activity_choose_course(callback_query: CallbackQuery):
     await callback_query.message.reply(text="Выберите урок", reply_markup=keyboard)
     await callback_query.answer()
 
+    await state.set_state(MarkActivitySG.choose_lesson)
 
-@dp.callback_query_handler(lambda c: re.match(r'^lesson_\d+$', c.data))
-async def callback_mark_activity_choose_lesson(callback_query: CallbackQuery):
+
+@dp.callback_query_handler(lambda c: re.match(r'^lesson_\d+$', c.data), state=MarkActivitySG.choose_lesson)
+async def callback_mark_activity_choose_lesson(callback_query: CallbackQuery, state: FSMContext):
     """Обработчик кнопки выбора урока для отметки активности"""
     lesson_id = int(callback_query.data.split('_')[1])
     lesson: Lesson = await (await get_lesson_factory()).load(lesson_id=lesson_id)
@@ -184,11 +208,93 @@ async def callback_mark_activity_choose_lesson(callback_query: CallbackQuery):
     activities: Tuple[Activity] = await lesson.activities
     for activity in activities:
         activity_topic = await activity.name
-        button = InlineKeyboardButton(activity_topic, callback_data=f'activity_{lesson.id}')
+        button = InlineKeyboardButton(activity_topic, callback_data=f'activity_{activity.id}')
         keyboard.add(button)
 
     await callback_query.message.reply(text="Выберите активность", reply_markup=keyboard)
     await callback_query.answer()
+
+    await state.set_state(MarkActivitySG.choose_activity)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^activity_\d+$', c.data), state=MarkActivitySG.choose_activity)
+async def callback_mark_activity_choose_activity(callback_query: CallbackQuery, state: FSMContext):
+    """Обработчик кнопки выбора активности для отметки активности, предлагает сохранить комментарий для менеджера"""
+    activity_id = int(callback_query.data.split('_')[1])
+    async with state.proxy() as data:
+        data["activity_id"] = activity_id
+
+    keyboard = InlineKeyboardMarkup()
+    button = InlineKeyboardButton("Пропустить", callback_data=f'no_comment')
+    keyboard.add(button)
+
+    await callback_query.message.reply(
+        "Вы можете отправить комментарий для менеджера к отметке активности.",
+        reply_markup=keyboard
+    )
+    await callback_query.answer()
+
+    await state.set_state(MarkActivitySG.choose_comment)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^no_comment$', c.data), state=MarkActivitySG.choose_comment)
+async def callback_mark_activity_no_comment(callback_query: CallbackQuery, state: FSMContext):
+    """Преподаватель решил не указывать комментарий для менеджера к активности, предлагаем указать количество часов"""
+    async with state.proxy() as data:
+        data["mark_activity_comment"] = None
+
+    message = callback_query.message
+
+    await message.answer(admin_client.messages.SET_HOURS_SUGGESTION)
+
+    await callback_query.answer()
+
+    await state.set_state(MarkActivitySG.choose_hours)
+
+
+@dp.message_handler(state=MarkActivitySG.choose_comment)
+async def msg_mark_activity_hours(message: Message, state: FSMContext):
+    async with state.proxy() as data:
+        data["mark_activity_comment"] = message.text
+
+    await message.answer(admin_client.messages.SET_HOURS_SUGGESTION)
+
+    await state.set_state(MarkActivitySG.choose_hours)
+
+
+@dp.message_handler(state=MarkActivitySG.choose_hours)
+async def msg_mark_activity_hours(message: Message, state: FSMContext):
+    """Обработчик сообщения с указанием количества часов по активности"""
+    try:
+        hours = float(message.text.replace(',', '.').strip())
+    except ValueError:
+        await message.answer("К сожалению, мне не удалось распознать число. Пожалуйста, попробуйте ещё раз.")
+        return
+
+    async with state.proxy() as data:
+        af = await get_activity_factory()
+        activity: Activity = await af.load(activity_id=data["activity_id"])
+        lesson: Lesson = await activity.lesson
+        course: Course = await lesson.course
+        arf = await get_activity_record_factory()
+        tf = await get_teacher_factory()
+        teacher: Teacher = await tf.load(teacher_id=message.from_user.id)
+        await arf.create(
+            teacher_id=teacher.id, activity_id=activity.id, hours=hours, comment=data["mark_activity_comment"]
+        )
+
+        await message.answer(
+            "✅ Записал.\n"
+            f"▪ Курс - {md.hitalic(await course.name_quoted)}\n"
+            f"▪ Тема урока - {md.hitalic(await lesson.topic_quoted or 'НЕ УКАЗАНА')}\n"
+            f"▪ {md.hunderline((await lesson.date_from).strftime(admin_client.constants.DATE_FORMAT))}"
+            f"-{md.hunderline((await lesson.date_to).strftime(admin_client.constants.DATE_FORMAT))}\n"
+            f"▪ Активность - {md.hitalic(await activity.name_quoted)}\n"
+            f"▪ {'Добавлено' if hours >= 0 else 'Убрано'} часов - {md.hitalic(abs(hours))}\n",
+            parse_mode=ParseMode.HTML
+        )
+
+    await state.finish()
 
 
 @dp.message_handler(Command("cancel"), state='*')
