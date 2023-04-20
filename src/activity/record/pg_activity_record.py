@@ -12,7 +12,7 @@ class PGActivityRecord(PGObject, ActivityRecord):
     def __init__(self, activity_record_id: int, pool: asyncpg.Pool):
         """Загрузка записи активности"""
         PGObject.__init__(
-            self, object_id=activity_record_id, pool=pool, table='activity_records', id_column_name='activity_id'
+            self, object_id=activity_record_id, pool=pool, table='activity_records', id_column_name='record_id'
         )
         ActivityRecord.__init__(self, activity_record_id=activity_record_id)
 
