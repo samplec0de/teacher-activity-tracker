@@ -1,7 +1,10 @@
+from typing import List
+
 import asyncpg
 
 from activity.activity import Activity
 from activity.pg_activity import PGActivity
+from lesson.lesson import Lesson
 
 
 class ActivityFactory:
@@ -20,3 +23,10 @@ class ActivityFactory:
     async def load(self, activity_id: int) -> Activity:
         """Получение объекта урока по id"""
         return PGActivity(activity_id=activity_id, pool=self._pool)
+
+    async def get_all(self, lesson: Lesson) -> List[Activity]:
+        """Получение всех активностей урока"""
+        async with self._pool.acquire() as conn:
+            query = f'SELECT activity_id FROM activities WHERE lesson_id = $1;'
+            activity_ids = await conn.fetch(query, lesson.id)
+            return [await self.load(row['activity_id']) for row in activity_ids]

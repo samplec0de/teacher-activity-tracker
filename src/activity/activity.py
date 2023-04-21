@@ -41,3 +41,13 @@ class Activity(ABC):
         """Имя в кавычках"""
         name = await self.name
         return f'"{name}"'
+
+    async def delete(self) -> None:
+        """Удаление активности"""
+        await self._delete()
+        self._id = None
+
+    @abstractmethod
+    async def _delete(self) -> None:
+        """Удаление активности"""
+        pass

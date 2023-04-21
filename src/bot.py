@@ -89,6 +89,14 @@ class RemoveLessonSG(StatesGroup):
     confirm = State()
 
 
+class RemoveActivitySG(StatesGroup):
+    """Группа состояний aiogram процесса удаления активности"""
+    choose_course = State()
+    choose_lesson = State()
+    choose_activity = State()
+    confirm = State()
+
+
 async def get_join_code_factory() -> CourseJoinCodeFactory:
     """Фабрика одноразовых кодов подключения к курсу"""
     global join_code_factory
@@ -205,7 +213,10 @@ async def callback_mark_activity_choose_course(callback_query: CallbackQuery, st
         button = InlineKeyboardButton(lesson_label, callback_data=f'lesson_{lesson.id}')
         keyboard.add(button)
 
-    await callback_query.message.reply(text="Выберите урок", reply_markup=keyboard)
+    if len(lessons) == 0:
+        await callback_query.message.reply(text="У курса нет уроков")
+    else:
+        await callback_query.message.reply(text="Выберите урок", reply_markup=keyboard)
     await callback_query.answer()
 
     await state.set_state(MarkActivitySG.choose_lesson)
@@ -777,6 +788,106 @@ async def callback_remove_lesson_confirm_yes(callback_query: CallbackQuery, stat
         await callback_query.message.reply("Урок успешно удален.")
     else:
         await callback_query.message.reply("Удаление урока отменено.")
+
+    await callback_query.answer()
+
+    await state.finish()
+
+
+@dp.message_handler(Command("remove_activity"))
+async def cmd_remove_activity(message: Message, state: FSMContext):
+    """Команда удаления активности /remove_activity"""
+    # Выбор курса
+    keyboard = InlineKeyboardMarkup()
+    cf = await get_course_factory()
+    courses = await cf.get_all()
+    for course in courses:
+        course_name = await course.name
+        button = InlineKeyboardButton(course_name, callback_data=f'course_{course.id}')
+        keyboard.add(button)
+    await message.reply("Выберите курс:", reply_markup=keyboard)
+    await state.set_state(RemoveActivitySG.choose_course)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=RemoveActivitySG.choose_course)
+async def callback_remove_activity_course_chosen(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь выбрал курс для удаления активности"""
+    course_id = int(callback_query.data.split('_')[1])
+    async with state.proxy() as data:
+        data["remove_activity_course_id"] = course_id
+
+    # Выбор урока
+    keyboard = InlineKeyboardMarkup()
+    lf = await get_lesson_factory()
+    lessons = await lf.get_all(course_id=course_id)
+    for lesson in lessons:
+        lesson_name = await lesson.topic
+        button = InlineKeyboardButton(text=lesson_name, callback_data=f'lesson_{lesson.id}')
+        keyboard.add(button)
+
+    await callback_query.message.reply("Выберите урок для удаления:", reply_markup=keyboard)
+    await callback_query.answer()
+
+    await state.set_state(RemoveActivitySG.choose_lesson)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^lesson_\d+$', c.data), state=RemoveActivitySG.choose_lesson)
+async def callback_remove_activity_lesson_chosen(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь выбрал урок для удаления активности"""
+    lesson_id = int(callback_query.data.split('_')[1])
+    async with state.proxy() as data:
+        data["remove_activity_lesson_id"] = lesson_id
+
+    # Выбор активности
+    keyboard = InlineKeyboardMarkup()
+    af = await get_activity_factory()
+    lf = await get_lesson_factory()
+    lesson = await lf.load(lesson_id=lesson_id)
+    activities = await af.get_all(lesson=lesson)
+    for activity in activities:
+        activity_name = await activity.name
+        button = InlineKeyboardButton(text=activity_name, callback_data=f'activity_{activity.id}')
+        keyboard.add(button)
+
+    await callback_query.message.reply("Выберите активность для удаления:", reply_markup=keyboard)
+    await callback_query.answer()
+
+    await state.set_state(RemoveActivitySG.choose_activity)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^activity_\d+$', c.data), state=RemoveActivitySG.choose_activity)
+async def callback_remove_activity_activity_chosen(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь выбрал активность для удаления"""
+    activity_id = int(callback_query.data.split('_')[1])
+    async with state.proxy() as data:
+        data["remove_activity_activity_id"] = activity_id
+
+    await callback_query.message.reply(
+        "Вы уверены что хотите удалить активность? Все коды подключения и преподаватели будут удалены безвозвратно.",
+        reply_markup=InlineKeyboardMarkup().add(
+            InlineKeyboardButton("Да, удалить", callback_data=f'yes'),
+            InlineKeyboardButton("Нет, отменить", callback_data=f'no')
+        )
+    )
+    await callback_query.answer()
+
+    await state.set_state(RemoveActivitySG.confirm)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^(yes|no)$', c.data), state=RemoveActivitySG.confirm)
+async def callback_remove_activity_confirm_yes(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь подтвердил удаление активности"""
+    async with state.proxy() as data:
+        activity_id = data["remove_activity_activity_id"]
+
+    if callback_query.data == 'yes':
+        af = await get_activity_factory()
+        activity = await af.load(activity_id=activity_id)
+        await activity.delete()
+
+        await callback_query.message.reply("Активность успешно удалена.")
+    else:
+        await callback_query.message.reply("Удаление активности отменено.")
 
     await callback_query.answer()
 
