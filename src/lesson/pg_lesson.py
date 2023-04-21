@@ -49,3 +49,13 @@ class PGLesson(PGObject, Lesson):
         course_id = await self._get_single_attribute('course_id')
         from course.pg_course import PGCourse
         return PGCourse(course_id=course_id, pool=self._pool)
+
+    async def delete(self) -> None:
+        async with self._pool.acquire() as conn:
+            queries = [
+                f'DELETE FROM activity_records WHERE activity_id IN (SELECT activity_id FROM activities WHERE lesson_id=$1);',
+                f'DELETE FROM activities WHERE lesson_id=$1;',
+                f'DELETE FROM lessons WHERE lesson_id=$1;',
+            ]
+            for query in queries:
+                await conn.execute(query, self._id)

@@ -72,3 +72,7 @@ class Lesson(ABC):
         """Курс, к которому относится урок"""
         pass
 
+    @abstractmethod
+    async def delete(self) -> None:
+        """Удалить урок"""
+        pass
