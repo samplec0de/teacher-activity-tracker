@@ -28,3 +28,16 @@ class PGCourse(PGObject, Course):
             lessons_query = "SELECT lesson_id FROM lessons WHERE course_id=$1"
             lessons_qr = await conn.fetch(lessons_query, self.id)
             return tuple([PGLesson(row['lesson_id'], pool=self._pool) for row in lessons_qr])
+
+    async def delete(self) -> None:
+        """Удалить курс"""
+        async with self._pool.acquire() as conn:
+            queries = [
+                f'DELETE FROM activities WHERE lesson_id IN (SELECT lesson_id FROM lessons WHERE course_id=$1);',
+                f'DELETE FROM teacher_courses WHERE course_id=$1;',
+                f'DELETE FROM lessons WHERE course_id=$1;',
+                f'DELETE FROM course_join_codes WHERE course_id=$1;',
+                f'DELETE FROM courses WHERE course_id=$1;'
+            ]
+            for query in queries:
+                await conn.execute(query, self.id)

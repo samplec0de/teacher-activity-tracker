@@ -36,3 +36,7 @@ class Course(ABC):
     async def name_quoted(self) -> str:
         """Название курса в кавычках"""
         return f'"{await self.name}"'
+
+    async def delete(self) -> None:
+        """Удалить курс"""
+        pass
