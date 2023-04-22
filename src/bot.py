@@ -31,6 +31,7 @@ dp = Dispatcher(bot, storage=MemoryStorage())
 TEACHER_COMMANDS = [
     BotCommand('start', 'Начать работу'),
     BotCommand('mark_activity', 'Отметить активность'),
+    BotCommand('cancel', 'Отменить текущую операцию'),
     BotCommand('help', 'Помощь по командам'),
 ]
 MANAGER_HELP_MESSAGE = md.text(
@@ -93,7 +94,7 @@ async def start_command(message: types.Message):
             await join_code.activate(teacher=teacher)
             text = f'Ты успешно подключен к курсу "{course_title}"!'
     else:
-        text = "Перейди по специальной ссылке или введи /start КОД_АКТИВАЦИИ"
+        text = await help_page(message.from_user.id)
 
     keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
     button_my_courses = KeyboardButton('Мои курсы')
@@ -111,14 +112,16 @@ async def help_page(teacher_id: int):
     return TEACHER_HELP_PAGE
 
 
-@dp.message_handler(Command('help'))
-async def help_command(message: types.Message):
+@dp.message_handler(Command('help'), state='*')
+async def help_command(message: types.Message, state: FSMContext):
     """Обработка команды /help для вывода списка доступных команд"""
-    await message.reply(await help_page(message.from_user.id))
+    if await state.get_state() is not None:
+        await message.answer("Операция отменена")
+        await state.finish()
+    await message.answer(await help_page(message.from_user.id))
 
 
-@dp.message_handler(text='Мои курсы')
-async def msg_my_courses(message: types.Message, state: FSMContext):
+async def my_courses(message: types.Message, state: FSMContext):
     """Обработка сообщения "Мои курсы" для запроса списка курсов и последующей отметки активности"""
     telegram_id = message.from_user.id
     teacher = await (await get_teacher_factory()).load(teacher_id=telegram_id)
@@ -133,9 +136,26 @@ async def msg_my_courses(message: types.Message, state: FSMContext):
         button = InlineKeyboardButton(course_name, callback_data=f'course_{course.id}')
         keyboard.add(button)
 
-    await message.reply("Выберите курс", reply_markup=keyboard)
+    if len(courses) == 0:
+        await message.reply(
+            "У тебя нет курсов. Добавь курс по коду от менеджера с помощью команды /start КОД_АКТИВАЦИИ"
+        )
+        await state.finish()
+    else:
+        await message.reply("Выберите курс", reply_markup=keyboard)
+        await state.set_state(MarkActivitySG.choose_course)
 
-    await state.set_state(MarkActivitySG.choose_course)
+
+@dp.message_handler(text='Мои курсы')
+async def msg_my_courses(message: types.Message, state: FSMContext):
+    """Обработка сообщения "Мои курсы" для запроса списка курсов и последующей отметки активности"""
+    await my_courses(message, state)
+
+
+@dp.message_handler(Command('mark_activity'))
+async def cmd_mark_activity(message: types.Message, state: FSMContext):
+    """Обработка команды /mark_activity для отметки активности"""
+    await my_courses(message, state)
 
 
 async def choose_lesson(callback_query: CallbackQuery):
@@ -614,7 +634,7 @@ async def msg_set_activity_name(message: Message, state: FSMContext):
     await state.finish()
 
 
-@dp.message_handler(Command("add_code"))
+@dp.message_handler(Command(["add_code", "add_join_code"]))
 @only_for_manager
 async def cmd_add_join_code(message: Message, state: FSMContext):
     """Команда добавления кода подключения к курсу /add_code"""
