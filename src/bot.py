@@ -601,6 +601,15 @@ async def msg_set_activity_name(message: Message, state: FSMContext):
             f"(обе даты включительно)",
             parse_mode=ParseMode.HTML
         )
+        kb_yes_no = InlineKeyboardMarkup()
+        kb_yes_no.add(
+            InlineKeyboardButton("Да", callback_data=f"lesson_{lesson.id}_yes"),
+            InlineKeyboardButton("Нет", callback_data=f"lesson_{lesson.id}_no")
+        )
+        await message.answer(
+            "Хотите добавить еще одну активность к этому уроку?",
+            reply_markup=kb_yes_no
+        )
 
     await state.finish()
 
