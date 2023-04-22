@@ -149,6 +149,20 @@ async def get_activity_record_factory() -> ActivityRecordFactory:
     return activity_record_factory
 
 
+def only_for_manager(func):
+    """Декоратор для команд, доступных только менеджерам бота"""
+
+    async def wrapper(message_or_callback: types.Message, state: FSMContext):
+        tf = await get_teacher_factory()
+        teacher: Teacher = await tf.load(teacher_id=message_or_callback.from_user.id)
+        if not await teacher.is_manager:
+            await message_or_callback.answer('Команда доступна только менеджерам бота')
+            return
+        return await func(message_or_callback, state)
+
+    return wrapper
+
+
 @dp.message_handler(CommandStart())
 async def start_command(message: types.Message):
     """Обработка команды /start, перехода по ссылке подключения и нажатия на кнопку запуска бота.
@@ -333,13 +347,14 @@ async def msg_mark_activity_hours(message: Message, state: FSMContext):
 
 
 @dp.message_handler(Command("cancel"), state='*')
-async def cmd_add_course(message: Message, state: FSMContext):
+async def cmd_cancel(message: Message, state: FSMContext):
     """Обработчик команды отмены, работает из любого состояния"""
-    await message.answer("Галя, отмена!")
+    await message.answer("Отменено")
     await state.finish()
 
 
 @dp.message_handler(Command("add_course"))
+@only_for_manager
 async def cmd_add_course(message: Message, state: FSMContext):
     """Обработчик команды добавления курса /add_course"""
     await message.answer(
@@ -349,6 +364,7 @@ async def cmd_add_course(message: Message, state: FSMContext):
 
 
 @dp.message_handler(state=AddCourseSG.get_name)
+@only_for_manager
 async def msg_set_course_name(message: Message, state: FSMContext):
     """Обработчик сообщения с названием курса процесса создания курса"""
     async with state.proxy() as data:
@@ -366,6 +382,7 @@ async def msg_set_course_name(message: Message, state: FSMContext):
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^no_description$', c.data), state=AddCourseSG.get_description)
+@only_for_manager
 async def create_course_no_description(callback_query: CallbackQuery, state: FSMContext):
     """Обработчик нажатия кнопки "Пропустить", ветка, где курс создается без описания процесса создания курса"""
     message = callback_query.message
@@ -378,6 +395,7 @@ async def create_course_no_description(callback_query: CallbackQuery, state: FSM
 
 
 @dp.message_handler(state=AddCourseSG.get_description)
+@only_for_manager
 async def msg_set_course_desc(message: Message, state: FSMContext):
     """Обработчик сообщения с описанием нового курса процесса создания курса"""
     description = message.text
@@ -396,6 +414,7 @@ async def msg_set_course_desc(message: Message, state: FSMContext):
 
 
 @dp.message_handler(Command("add_lesson"))
+@only_for_manager
 async def cmd_add_lesson(message: Message, state: FSMContext):
     """Команда добавления урока /add_lesson"""
     keyboard = InlineKeyboardMarkup()
@@ -411,6 +430,7 @@ async def cmd_add_lesson(message: Message, state: FSMContext):
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=AddLessonSG.choose_course)
+@only_for_manager
 async def callback_add_lesson_choose_course(callback_query: CallbackQuery, state: FSMContext):
     """Обработчик кнопки выбора курса в процессе добавления урока"""
     course_id = int(callback_query.data.split('_')[1])
@@ -428,6 +448,7 @@ async def callback_add_lesson_choose_course(callback_query: CallbackQuery, state
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^no_topic$', c.data), state=AddLessonSG.choose_topic)
+@only_for_manager
 async def callback_add_lesson_no_topic(callback_query: CallbackQuery, state: FSMContext):
     """Обработчик кнопки "Не указывать" [тему] для урока в процессе создания урока, предлагаем выбрать период"""
     async with state.proxy() as data:
@@ -441,6 +462,7 @@ async def callback_add_lesson_no_topic(callback_query: CallbackQuery, state: FSM
 
 
 @dp.message_handler(state=AddLessonSG.choose_topic)
+@only_for_manager
 async def msg_set_lesson_topic(message: Message, state: FSMContext):
     """Обработчик темы прислал урока в процессе создания урока, предлагаем выбрать период"""
     async with state.proxy() as data:
@@ -452,6 +474,7 @@ async def msg_set_lesson_topic(message: Message, state: FSMContext):
 
 
 @dp.message_handler(state=AddLessonSG.choose_period)
+@only_for_manager
 async def msg_set_lesson_period(message: Message, state: FSMContext):
     """Пользователь прислал период сбора активности по уроку"""
     async with state.proxy() as data:
@@ -514,6 +537,7 @@ async def msg_set_lesson_period(message: Message, state: FSMContext):
 
 
 @dp.message_handler(Command("add_activity"))
+@only_for_manager
 async def cmd_add_activity(message: Message, state: FSMContext):
     """Команда добавления активности /add_activity"""
     keyboard = InlineKeyboardMarkup()
@@ -529,7 +553,8 @@ async def cmd_add_activity(message: Message, state: FSMContext):
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=AddActivitySG.choose_course)
-async def callback_add_course_choosed(callback_query: CallbackQuery, state: FSMContext):
+@only_for_manager
+async def callback_add_course_chosen(callback_query: CallbackQuery, state: FSMContext):
     """Пользователь выбрал курс в процессе добавления активности"""
     course_id = int(callback_query.data.split('_')[1])
     course: Course = await (await get_course_factory()).load(course_id=course_id)
@@ -551,6 +576,7 @@ async def callback_add_course_choosed(callback_query: CallbackQuery, state: FSMC
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^lesson_\d+$', c.data), state=AddActivitySG.choose_lesson)
+@only_for_manager
 async def callback_add_activity_lesson_choosed(callback_query: CallbackQuery, state: FSMContext):
     """Обработчик выбора урока в процессе добавления активности"""
     lesson_id = int(callback_query.data.split('_')[1])
@@ -565,6 +591,7 @@ async def callback_add_activity_lesson_choosed(callback_query: CallbackQuery, st
 
 
 @dp.message_handler(state=AddActivitySG.choose_name)
+@only_for_manager
 async def msg_set_activity_name(message: Message, state: FSMContext):
     """Обработчик имени активности в процессе добавления новой активности"""
     activity_name = message.text
@@ -589,6 +616,7 @@ async def msg_set_activity_name(message: Message, state: FSMContext):
 
 
 @dp.message_handler(Command("add_code"))
+@only_for_manager
 async def cmd_add_join_code(message: Message, state: FSMContext):
     """Команда добавления кода подключения к курсу /add_code"""
     keyboard = InlineKeyboardMarkup()
@@ -604,6 +632,7 @@ async def cmd_add_join_code(message: Message, state: FSMContext):
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=AddJoinCodeSG.choose_course)
+@only_for_manager
 async def callback_add_join_code_course_chosen(callback_query: CallbackQuery, state: FSMContext):
     """Пользователь выбрал курс для создания одноразового кода, предлагает задать комментарий к новому коду"""
     course_id = int(callback_query.data.split('_')[1])
@@ -652,6 +681,7 @@ async def create_code(message: Message, state: FSMContext):
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^no_comment$', c.data), state=AddJoinCodeSG.choose_description)
+@only_for_manager
 async def callback_add_join_code_no_description(callback_query: CallbackQuery, state: FSMContext):
     """Пользователь решил не указывать тему для урока, предлагаем выбрать период"""
     async with state.proxy() as data:
@@ -667,6 +697,7 @@ async def callback_add_join_code_no_description(callback_query: CallbackQuery, s
 
 
 @dp.message_handler(state=AddJoinCodeSG.choose_description)
+@only_for_manager
 async def msg_set_join_code_description(message: Message, state: FSMContext):
     """Пользователь прислал примечание к новому коду"""
     async with state.proxy() as data:
@@ -678,6 +709,7 @@ async def msg_set_join_code_description(message: Message, state: FSMContext):
 
 
 @dp.message_handler(Command("remove_course"))
+@only_for_manager
 async def cmd_remove_course(message: Message, state: FSMContext):
     """Команда удаления курса /remove_course"""
     keyboard = InlineKeyboardMarkup()
@@ -697,6 +729,7 @@ async def cmd_remove_course(message: Message, state: FSMContext):
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=RemoveCourseSG.choose_course)
+@only_for_manager
 async def callback_remove_course_course_chosen(callback_query: CallbackQuery, state: FSMContext):
     """Пользователь выбрал курс для удаления"""
     course_id = int(callback_query.data.split('_')[1])
@@ -716,6 +749,7 @@ async def callback_remove_course_course_chosen(callback_query: CallbackQuery, st
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^(yes|no)$', c.data), state=RemoveCourseSG.confirm)
+@only_for_manager
 async def callback_remove_course_confirm_yes(callback_query: CallbackQuery, state: FSMContext):
     """Пользователь подтвердил удаление курса"""
     async with state.proxy() as data:
@@ -736,6 +770,7 @@ async def callback_remove_course_confirm_yes(callback_query: CallbackQuery, stat
 
 
 @dp.message_handler(Command("remove_lesson"))
+@only_for_manager
 async def cmd_remove_lesson(message: Message, state: FSMContext):
     """Команда удаления урока /remove_lesson"""
     keyboard = InlineKeyboardMarkup()
@@ -750,6 +785,7 @@ async def cmd_remove_lesson(message: Message, state: FSMContext):
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=RemoveLessonSG.choose_course)
+@only_for_manager
 async def callback_remove_lesson_course_chosen(callback_query: CallbackQuery, state: FSMContext):
     """Пользователь выбрал курс для удаления урока"""
     course_id = int(callback_query.data.split('_')[1])
@@ -771,6 +807,7 @@ async def callback_remove_lesson_course_chosen(callback_query: CallbackQuery, st
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^lesson_\d+$', c.data), state=RemoveLessonSG.choose_lesson)
+@only_for_manager
 async def callback_remove_lesson_lesson_chosen(callback_query: CallbackQuery, state: FSMContext):
     """Пользователь выбрал урок для удаления"""
     lesson_id = int(callback_query.data.split('_')[1])
@@ -790,6 +827,7 @@ async def callback_remove_lesson_lesson_chosen(callback_query: CallbackQuery, st
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^(yes|no)$', c.data), state=RemoveLessonSG.confirm)
+@only_for_manager
 async def callback_remove_lesson_confirm_yes(callback_query: CallbackQuery, state: FSMContext):
     """Пользователь подтвердил удаление урока"""
     async with state.proxy() as data:
@@ -810,6 +848,7 @@ async def callback_remove_lesson_confirm_yes(callback_query: CallbackQuery, stat
 
 
 @dp.message_handler(Command("remove_activity"))
+@only_for_manager
 async def cmd_remove_activity(message: Message, state: FSMContext):
     """Команда удаления активности /remove_activity"""
     # Выбор курса
@@ -825,6 +864,7 @@ async def cmd_remove_activity(message: Message, state: FSMContext):
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=RemoveActivitySG.choose_course)
+@only_for_manager
 async def callback_remove_activity_course_chosen(callback_query: CallbackQuery, state: FSMContext):
     """Пользователь выбрал курс для удаления активности"""
     course_id = int(callback_query.data.split('_')[1])
@@ -847,6 +887,7 @@ async def callback_remove_activity_course_chosen(callback_query: CallbackQuery, 
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^lesson_\d+$', c.data), state=RemoveActivitySG.choose_lesson)
+@only_for_manager
 async def callback_remove_activity_lesson_chosen(callback_query: CallbackQuery, state: FSMContext):
     """Пользователь выбрал урок для удаления активности"""
     lesson_id = int(callback_query.data.split('_')[1])
@@ -871,6 +912,7 @@ async def callback_remove_activity_lesson_chosen(callback_query: CallbackQuery, 
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^activity_\d+$', c.data), state=RemoveActivitySG.choose_activity)
+@only_for_manager
 async def callback_remove_activity_activity_chosen(callback_query: CallbackQuery, state: FSMContext):
     """Пользователь выбрал активность для удаления"""
     activity_id = int(callback_query.data.split('_')[1])
@@ -890,6 +932,7 @@ async def callback_remove_activity_activity_chosen(callback_query: CallbackQuery
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^(yes|no)$', c.data), state=RemoveActivitySG.confirm)
+@only_for_manager
 async def callback_remove_activity_confirm_yes(callback_query: CallbackQuery, state: FSMContext):
     """Пользователь подтвердил удаление активности"""
     async with state.proxy() as data:
