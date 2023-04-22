@@ -10,7 +10,7 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import CommandStart, Command
 from aiogram.dispatcher.filters.state import StatesGroup, State
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, \
-    CallbackQuery, Message, ParseMode
+    CallbackQuery, Message, ParseMode, BotCommand
 from aiogram.utils import executor
 
 import admin_client
@@ -32,6 +32,10 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token='5952854813:AAFemh5A5MbK_EBZB8p7BBjDnYvWpjav-Eo')
 dp = Dispatcher(bot, storage=MemoryStorage())
 
+TEACHER_COMMANDS = [
+    BotCommand('start', 'Начать работу'),
+    BotCommand('mark_activity', 'Отметить активность'),
+]
 
 join_code_factory = None
 teacher_factory = None
@@ -150,6 +154,8 @@ async def start_command(message: types.Message):
     """Обработка команды /start, перехода по ссылке подключения и нажатия на кнопку запуска бота.
     Функционал подключения к курсу.
     """
+    await bot.set_my_commands(TEACHER_COMMANDS)
+
     parameter_value = message.get_args()
     if parameter_value:
         join_code: CourseJoinCode = await (await get_join_code_factory()).load(code=parameter_value)
