@@ -19,6 +19,7 @@ from course.join_code.join_code import CourseJoinCode
 from factory import get_teacher_factory, get_join_code_factory, get_course_factory, get_lesson_factory, \
     get_activity_factory, get_activity_record_factory
 from lesson.lesson import Lesson
+from middleware import TypingMiddleware
 from state_groups import MarkActivitySG, AddCourseSG, AddLessonSG, AddActivitySG, AddJoinCodeSG, RemoveCourseSG, \
     RemoveLessonSG, RemoveActivitySG
 from teacher.teacher import Teacher
@@ -27,6 +28,7 @@ logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token='5952854813:AAFemh5A5MbK_EBZB8p7BBjDnYvWpjav-Eo')
 dp = Dispatcher(bot, storage=MemoryStorage())
+dp.middleware.setup(TypingMiddleware())
 
 TEACHER_COMMANDS = [
     BotCommand('start', 'Начать работу'),
