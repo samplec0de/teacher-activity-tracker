@@ -8,7 +8,6 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import CommandStart, Command
-from aiogram.dispatcher.filters.state import StatesGroup, State
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, \
     CallbackQuery, Message, ParseMode, BotCommand
 from aiogram.utils import executor
@@ -24,6 +23,8 @@ from course.join_code.join_code_factory import CourseJoinCodeFactory
 from database import get_pool
 from lesson.lesson import Lesson
 from lesson.lesson_factory import LessonFactory
+from state_groups import MarkActivitySG, AddCourseSG, AddLessonSG, AddActivitySG, AddJoinCodeSG, RemoveCourseSG, \
+    RemoveLessonSG, RemoveActivitySG
 from teacher.teacher import Teacher
 from teacher.teacher_factory import TeacherFactory
 
@@ -43,62 +44,6 @@ course_factory = None
 lesson_factory = None
 activity_factory = None
 activity_record_factory = None
-
-
-class MarkActivitySG(StatesGroup):
-    """Группа состояний aiogram процесса отметки активности"""
-    choose_course = State()
-    choose_lesson = State()
-    choose_activity = State()
-    choose_comment = State()
-    choose_hours = State()
-
-
-class AddCourseSG(StatesGroup):
-    """Группа состояний aiogram процесса добавления курса"""
-    get_name = State()
-    get_description = State()
-
-
-class AddLessonSG(StatesGroup):
-    """Группа состояний aiogram процесса добавления урока в курс"""
-    choose_course = State()
-    choose_topic = State()
-    choose_period = State()
-
-
-class AddActivitySG(StatesGroup):
-    """Группа состояний aiogram процесса добавления активности в урок по курсу"""
-    choose_course = State()
-    choose_lesson = State()
-    choose_name = State()
-
-
-class AddJoinCodeSG(StatesGroup):
-    """Группа состояний aiogram процесса добавления кода подключения к курсу"""
-    choose_course = State()
-    choose_description = State()
-
-
-class RemoveCourseSG(StatesGroup):
-    """Группа состояний aiogram процесса удаления курса"""
-    choose_course = State()
-    confirm = State()
-
-
-class RemoveLessonSG(StatesGroup):
-    """Группа состояний aiogram процесса удаления урока"""
-    choose_course = State()
-    choose_lesson = State()
-    confirm = State()
-
-
-class RemoveActivitySG(StatesGroup):
-    """Группа состояний aiogram процесса удаления активности"""
-    choose_course = State()
-    choose_lesson = State()
-    choose_activity = State()
-    confirm = State()
 
 
 async def get_join_code_factory() -> CourseJoinCodeFactory:
@@ -217,9 +162,8 @@ async def msg_my_courses(message: types.Message, state: FSMContext):
     await state.set_state(MarkActivitySG.choose_course)
 
 
-@dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=MarkActivitySG.choose_course)
-async def callback_mark_activity_choose_course(callback_query: CallbackQuery, state: FSMContext):
-    """Обработчик кнопки выбора курса для отметки активности"""
+async def choose_lesson(callback_query: CallbackQuery):
+    """Обработка выбора урока"""
     course_id = int(callback_query.data.split('_')[1])
     course: Course = await (await get_course_factory()).load(course_id=course_id)
 
@@ -235,11 +179,20 @@ async def callback_mark_activity_choose_course(callback_query: CallbackQuery, st
 
     if len(lessons) == 0:
         await callback_query.message.reply(text="У курса нет уроков")
-        await state.finish()
+        return False
     else:
         await callback_query.message.reply(text="Выберите урок", reply_markup=keyboard)
-        await state.set_state(MarkActivitySG.choose_lesson)
+        return True
 
+
+@dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=MarkActivitySG.choose_course)
+async def callback_mark_activity_choose_course(callback_query: CallbackQuery, state: FSMContext):
+    """Обработчик кнопки выбора курса для отметки активности"""
+    result = await choose_lesson(callback_query)
+    if result:
+        await state.set_state(MarkActivitySG.choose_lesson)
+    else:
+        await state.finish()
     await callback_query.answer()
 
 
@@ -556,23 +509,12 @@ async def cmd_add_activity(message: Message, state: FSMContext):
 @only_for_manager
 async def callback_add_course_chosen(callback_query: CallbackQuery, state: FSMContext):
     """Пользователь выбрал курс в процессе добавления активности"""
-    course_id = int(callback_query.data.split('_')[1])
-    course: Course = await (await get_course_factory()).load(course_id=course_id)
-
-    keyboard = InlineKeyboardMarkup()
-    lessons: Tuple[Lesson] = await course.lessons
-    for lesson in lessons:
-        lesson_date = await lesson.date_from
-        lesson_date_str = lesson_date.strftime("%d.%m.%Y")
-        lesson_topic = await lesson.topic
-        lesson_label = f"{lesson_date_str}: {lesson_topic}"
-        button = InlineKeyboardButton(lesson_label, callback_data=f'lesson_{lesson.id}')
-        keyboard.add(button)
-
-    await callback_query.message.reply(text="Выберите урок", reply_markup=keyboard)
+    result = await choose_lesson(callback_query)
+    if result:
+        await state.set_state(AddActivitySG.choose_lesson)
+    else:
+        await state.finish()
     await callback_query.answer()
-
-    await state.set_state(AddActivitySG.choose_lesson)
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^lesson_\d+$', c.data), state=AddActivitySG.choose_lesson)
@@ -792,18 +734,13 @@ async def callback_remove_lesson_course_chosen(callback_query: CallbackQuery, st
     async with state.proxy() as data:
         data["remove_lesson_course_id"] = course_id
 
-    keyboard = InlineKeyboardMarkup()
-    lf = await get_lesson_factory()
-    lessons = await lf.get_all(course_id=course_id)
-    for lesson in lessons:
-        lesson_name = await lesson.topic
-        button = InlineKeyboardButton(text=lesson_name, callback_data=f'lesson_{lesson.id}')
-        keyboard.add(button)
+    result = await choose_lesson(callback_query)
+    if result:
+        await state.set_state(RemoveLessonSG.choose_lesson)
+    else:
+        await state.finish()
 
-    await callback_query.message.reply("Выберите урок для удаления:", reply_markup=keyboard)
     await callback_query.answer()
-
-    await state.set_state(RemoveLessonSG.choose_lesson)
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^lesson_\d+$', c.data), state=RemoveLessonSG.choose_lesson)
