@@ -2,7 +2,7 @@ import datetime
 import logging
 import os
 import re
-from typing import Tuple
+from typing import Tuple, List
 
 import aiogram.utils.markdown as md
 from aiogram import Bot, Dispatcher, types
@@ -23,7 +23,7 @@ from lesson.lesson import Lesson
 from links.teacher_telegram_link import TeacherTelegramLink
 from middleware import TypingMiddleware, FSMFinishMiddleware
 from state_groups import MarkActivitySG, AddCourseSG, AddLessonSG, AddActivitySG, AddJoinCodeSG, RemoveCourseSG, \
-    RemoveLessonSG, RemoveActivitySG, JoinCodesListSG
+    RemoveLessonSG, RemoveActivitySG, JoinCodesListSG, RemoveJoinCodeSG
 from teacher.teacher import Teacher
 
 logging.basicConfig(level=logging.INFO)
@@ -704,6 +704,119 @@ async def callback_join_codes_course_chosen(callback_query: CallbackQuery, state
         ),
         parse_mode=ParseMode.HTML
     )
+    await state.finish()
+
+
+@dp.message_handler(Command(["remove_code", "remove_join_code"]))
+@only_for_manager
+async def cmd_remove_join_code(message: Message, state: FSMContext):
+    """Команда удаления кода подключения к курсу /remove_code"""
+    result = await choose_course(message)
+    if result:
+        await state.set_state(RemoveJoinCodeSG.choose_course)
+    else:
+        await state.finish()
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=RemoveJoinCodeSG.choose_course)
+@only_for_manager
+async def callback_remove_join_code_course_chosen(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь выбрал курс для удаления одноразового кода"""
+    course_id = int(callback_query.data.split('_')[1])
+    async with state.proxy() as data:
+        data["course_id"] = course_id
+
+    await callback_query.message.answer("🔎 Поиск кодов...")
+    cf = await get_course_factory()
+    course = await cf.load(course_id)
+    jcf = await get_join_code_factory()
+    active_join_codes = [code for code in await jcf.load_by_course(course=course) if await code.activated_by is None]
+    if not active_join_codes:
+        await callback_query.message.answer("❗Активные коды подключения к курсу не найдены")
+        await state.finish()
+        return
+
+    active_codes_labels: List[str] = []
+    kb = InlineKeyboardMarkup()
+    for join_code in active_join_codes:
+        code = md.hcode(join_code.code)
+        comment = md.hitalic(await join_code.comment_quoted or 'БЕЗ ПРИМЕЧАНИЯ')
+        active_codes_labels.append(f"▪ {code} - {comment}")
+        kb.add(InlineKeyboardButton(f"{join_code.code}", callback_data=f"join_code_{join_code.code}"))
+
+    await callback_query.message.answer(
+        md.text(
+            f"🔑 Список активных кодов подключения к курсу {await course.name_quoted}",
+            "",
+            "Выберите код для удаления:",
+            *active_codes_labels,
+            sep="\n"
+        ),
+        reply_markup=kb,
+        parse_mode=ParseMode.HTML
+    )
+    await state.set_state(RemoveJoinCodeSG.choose_code)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^join_code_.+$', c.data), state=RemoveJoinCodeSG.choose_code)
+@only_for_manager
+async def callback_remove_join_code_code_chosen(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь выбрал код для удаления"""
+    async with state.proxy() as data:
+        course_id = data["course_id"]
+
+    code = callback_query.data.split('_')[2]
+    jcf = await get_join_code_factory()
+    join_code = await jcf.load(code)
+    if join_code is None:
+        await callback_query.message.answer("❗Код не найден")
+        await state.finish()
+        return
+
+    if await join_code.activated_by is not None:
+        await callback_query.message.answer("❗Код уже активирован")
+        await state.finish()
+        return
+
+    await callback_query.message.answer(
+        md.text(
+            f"🔑 Удаление кода {md.hcode(join_code.code)}",
+            "",
+            f"Код будет удален из базы данных. Действительно удалить?",
+            sep="\n"
+        ),
+        reply_markup=InlineKeyboardMarkup().add(
+            InlineKeyboardButton("Да", callback_data=f"confirm_remove_join_code_{join_code.code}"),
+            InlineKeyboardButton("Нет", callback_data=f"cancel_remove_join_code_{join_code.code}")
+        ),
+        parse_mode=ParseMode.HTML
+    )
+    await state.set_state(RemoveJoinCodeSG.confirm)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^confirm_remove_join_code_.+$', c.data), state=RemoveJoinCodeSG.confirm)
+@only_for_manager
+async def callback_remove_join_code_confirm(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь подтвердил удаление кода"""
+    code = callback_query.data.split('_')[4]
+    jcf = await get_join_code_factory()
+    join_code = await jcf.load(code)
+
+    if not await join_code.is_issued:
+        await callback_query.message.answer("❗Код не найден")
+        await state.finish()
+        return
+
+    await join_code.delete()
+    await callback_query.message.answer("✅ Код удален")
+    await state.finish()
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^cancel_remove_join_code_.+$', c.data), state=RemoveJoinCodeSG.confirm)
+@only_for_manager
+async def callback_remove_join_code_cancel(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь отменил удаление кода"""
+    await callback_query.message.answer("❌ Удаление кода отменено")
     await state.finish()
 
 

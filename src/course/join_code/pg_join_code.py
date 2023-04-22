@@ -50,3 +50,8 @@ class PGCourseJoinCode(PGObject, CourseJoinCode):
             query = f'INSERT INTO course_join_codes (code_id, course_id, comment) VALUES ($1, $2, $3);'
             course_id = course.id
             await conn.execute(query, self.code, course_id, comment)
+
+    async def delete(self) -> None:
+        async with self._pool.acquire() as conn:
+            query = f'DELETE FROM course_join_codes WHERE code_id=$1;'
+            await conn.execute(query, self.code)

@@ -32,6 +32,11 @@ class CourseJoinCode(ABC):
         return f'"{comment}"'
 
     @property
+    async def is_issued(self) -> bool:
+        """True, если код уже был создан"""
+        return await self.course is not None
+
+    @property
     @abstractmethod
     async def course(self) -> Optional[Course]:
         """Курс, к которому можно присоединиться по данному коду"""
@@ -58,3 +63,7 @@ class CourseJoinCode(ABC):
         all_chars = string.ascii_letters + string.digits
         code = ''.join(random.choices(all_chars, k=length))
         return code
+
+    async def delete(self) -> None:
+        """Удаляет код"""
+        pass
