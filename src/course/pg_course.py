@@ -33,6 +33,9 @@ class PGCourse(PGObject, Course):
         """Удалить курс"""
         async with self._pool.acquire() as conn:
             queries = [
+                f'DELETE FROM activity_records WHERE activity_id IN '
+                f'(SELECT activity_id FROM activities WHERE lesson_id IN '
+                f'(SELECT lesson_id FROM lessons WHERE course_id=$1));',
                 f'DELETE FROM activities WHERE lesson_id IN (SELECT lesson_id FROM lessons WHERE course_id=$1);',
                 f'DELETE FROM teacher_courses WHERE course_id=$1;',
                 f'DELETE FROM lessons WHERE course_id=$1;',
