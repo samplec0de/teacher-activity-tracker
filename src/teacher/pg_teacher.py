@@ -38,3 +38,7 @@ class PGTeacher(PGObject, Teacher):
     @comment.setter
     async def comment(self, value: str) -> None:
         await self._set_single_attribute('comment', value)
+
+    @property
+    async def is_manager(self) -> bool:
+        return await self._get_single_attribute('is_manager')

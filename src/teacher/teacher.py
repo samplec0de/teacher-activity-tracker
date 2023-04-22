@@ -43,3 +43,9 @@ class Teacher(ABC):
     async def comment(self, value: str) -> None:
         """Заметка, комментарий, которую оставили про учителя"""
         pass
+
+    @property
+    @abstractmethod
+    async def is_manager(self) -> bool:
+        """Является ли учитель менеджером"""
+        pass
