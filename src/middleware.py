@@ -23,7 +23,7 @@ class FSMFinishMiddleware(BaseMiddleware):
         super().__init__()
 
     async def trigger(self, action, args):
-        if isinstance(args[0], Message) and action == 'process_message':
+        if isinstance(args[0], Message) and action == 'process_message' and args[0].text.startswith('/'):
             message: Message = args[0]
             state = FSMContext(
                 storage=self.dispatcher.storage, chat=message.chat.id, user=message.from_user.id
