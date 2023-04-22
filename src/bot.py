@@ -19,7 +19,7 @@ from course.join_code.join_code import CourseJoinCode
 from factory import get_teacher_factory, get_join_code_factory, get_course_factory, get_lesson_factory, \
     get_activity_factory, get_activity_record_factory
 from lesson.lesson import Lesson
-from middleware import TypingMiddleware
+from middleware import TypingMiddleware, FSMFinishMiddleware
 from state_groups import MarkActivitySG, AddCourseSG, AddLessonSG, AddActivitySG, AddJoinCodeSG, RemoveCourseSG, \
     RemoveLessonSG, RemoveActivitySG
 from teacher.teacher import Teacher
@@ -29,6 +29,7 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token='5952854813:AAFemh5A5MbK_EBZB8p7BBjDnYvWpjav-Eo')
 dp = Dispatcher(bot, storage=MemoryStorage())
 dp.middleware.setup(TypingMiddleware())
+dp.middleware.setup(FSMFinishMiddleware(dispatcher=dp))
 
 TEACHER_COMMANDS = [
     BotCommand('start', 'Начать работу'),
@@ -117,9 +118,6 @@ async def help_page(teacher_id: int):
 @dp.message_handler(Command('help'), state='*')
 async def help_command(message: types.Message, state: FSMContext):
     """Обработка команды /help для вывода списка доступных команд"""
-    if await state.get_state() is not None:
-        await message.answer("Операция отменена")
-        await state.finish()
     await message.answer(await help_page(message.from_user.id))
 
 
@@ -157,9 +155,6 @@ async def msg_my_courses(message: types.Message, state: FSMContext):
 @dp.message_handler(Command('mark_activity'))
 async def cmd_mark_activity(message: types.Message, state: FSMContext):
     """Обработка команды /mark_activity для отметки активности"""
-    if await state.get_state() is not None:
-        await message.answer("Операция отменена")
-        await state.finish()
     await my_courses(message, state)
 
 
@@ -171,10 +166,12 @@ async def choose_lesson(callback_query: CallbackQuery):
     keyboard = InlineKeyboardMarkup()
     lessons: Tuple[Lesson] = await course.lessons
     for lesson in lessons:
-        lesson_date = await lesson.date_from
-        lesson_date_str = lesson_date.strftime("%d.%m.%Y")
-        lesson_topic = await lesson.topic
-        lesson_label = f"{lesson_date_str}: {lesson_topic}"
+        lesson_date_from = await lesson.date_from
+        lesson_date_to = await lesson.date_to
+        lesson_date_from_str = lesson_date_from.strftime("%d.%m.%Y")
+        lesson_date_to_str = lesson_date_to.strftime("%d.%m.%Y")
+        lesson_topic = await lesson.topic or 'Тема не указана'
+        lesson_label = f"{lesson_date_from_str}-{lesson_date_to_str}: {lesson_topic}"
         button = InlineKeyboardButton(lesson_label, callback_data=f'lesson_{lesson.id}')
         keyboard.add(button)
 
@@ -197,9 +194,8 @@ async def callback_mark_activity_choose_course(callback_query: CallbackQuery, st
     await callback_query.answer()
 
 
-@dp.callback_query_handler(lambda c: re.match(r'^lesson_\d+$', c.data), state=MarkActivitySG.choose_lesson)
-async def callback_mark_activity_choose_lesson(callback_query: CallbackQuery, state: FSMContext):
-    """Обработчик кнопки выбора урока для отметки активности"""
+async def choose_activity(callback_query: CallbackQuery):
+    """Обработка выбора активности"""
     lesson_id = int(callback_query.data.split('_')[1])
     lesson: Lesson = await (await get_lesson_factory()).load(lesson_id=lesson_id)
 
@@ -212,10 +208,20 @@ async def callback_mark_activity_choose_lesson(callback_query: CallbackQuery, st
 
     if len(activities) == 0:
         await callback_query.message.reply(text="У урока нет активностей")
-        await state.finish()
+        return False
     else:
         await callback_query.message.reply(text="Выберите активность", reply_markup=keyboard)
+        return True
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^lesson_\d+$', c.data), state=MarkActivitySG.choose_lesson)
+async def callback_mark_activity_choose_lesson(callback_query: CallbackQuery, state: FSMContext):
+    """Обработчик кнопки выбора урока для отметки активности"""
+    result = await choose_activity(callback_query)
+    if result:
         await state.set_state(MarkActivitySG.choose_activity)
+    else:
+        await state.finish()
 
     await callback_query.answer()
 
@@ -304,7 +310,7 @@ async def msg_mark_activity_hours(message: Message, state: FSMContext):
 async def cmd_cancel(message: Message, state: FSMContext):
     """Обработчик команды отмены, работает из любого состояния"""
     help_msg = await help_page(message.from_user.id)
-    await message.answer(f'Операция отменена. {help_msg}')
+    await message.answer(help_msg)
     await state.finish()
 
 
@@ -312,9 +318,6 @@ async def cmd_cancel(message: Message, state: FSMContext):
 @only_for_manager
 async def cmd_add_course(message: Message, state: FSMContext):
     """Обработчик команды добавления курса /add_course"""
-    if await state.get_state() is not None:
-        await message.answer("Операция отменена")
-        await state.finish()
     await message.answer(
         "Хорошо, давайте добавим новый курс. Если передумаете, пишите /cancel. Как будет называться новый курс?"
     )
@@ -420,10 +423,6 @@ async def callback_add_lessons(callback_query: CallbackQuery, state: FSMContext)
 @only_for_manager
 async def cmd_add_lesson(message: Message, state: FSMContext):
     """Команда добавления урока /add_lesson"""
-    if await state.get_state() is not None:
-        await message.answer("Операция отменена")
-        await state.finish()
-
     result = await choose_course(message)
     if result:
         await state.set_state(AddLessonSG.choose_course)
@@ -573,10 +572,6 @@ async def callback_add_activity_to_lesson(call: CallbackQuery, state: FSMContext
 @only_for_manager
 async def cmd_add_activity(message: Message, state: FSMContext):
     """Команда добавления активности /add_activity"""
-    if await state.get_state() is not None:
-        await message.answer("Операция отменена")
-        await state.finish()
-
     result = await choose_course(message)
     if result:
         await state.set_state(AddActivitySG.choose_course)
@@ -649,10 +644,6 @@ async def msg_set_activity_name(message: Message, state: FSMContext):
 @only_for_manager
 async def cmd_add_join_code(message: Message, state: FSMContext):
     """Команда добавления кода подключения к курсу /add_code"""
-    if await state.get_state() is not None:
-        await message.answer("Операция отменена")
-        await state.finish()
-
     result = await choose_course(message)
     if result:
         await state.set_state(AddJoinCodeSG.choose_course)
@@ -741,9 +732,6 @@ async def msg_set_join_code_description(message: Message, state: FSMContext):
 @only_for_manager
 async def cmd_remove_course(message: Message, state: FSMContext):
     """Команда удаления курса /remove_course"""
-    if await state.get_state() is not None:
-        await message.answer("Операция отменена")
-        await state.finish()
     keyboard = InlineKeyboardMarkup()
     cf = await get_course_factory()
     courses = await cf.get_all()
@@ -822,10 +810,6 @@ async def choose_course(message: Message) -> bool:
 @only_for_manager
 async def cmd_remove_lesson(message: Message, state: FSMContext):
     """Команда удаления урока /remove_lesson"""
-    if await state.get_state() is not None:
-        await message.answer("Операция отменена")
-        await state.finish()
-
     result = await choose_course(message)
     if result:
         await state.set_state(RemoveLessonSG.choose_course)
@@ -895,10 +879,6 @@ async def callback_remove_lesson_confirm_yes(callback_query: CallbackQuery, stat
 @only_for_manager
 async def cmd_remove_activity(message: Message, state: FSMContext):
     """Команда удаления активности /remove_activity"""
-    if await state.get_state() is not None:
-        await message.answer("Операция отменена")
-        await state.finish()
-
     result = await choose_course(message)
     if result:
         await state.set_state(RemoveActivitySG.choose_course)
@@ -914,19 +894,13 @@ async def callback_remove_activity_course_chosen(callback_query: CallbackQuery, 
     async with state.proxy() as data:
         data["remove_activity_course_id"] = course_id
 
-    # Выбор урока
-    keyboard = InlineKeyboardMarkup()
-    lf = await get_lesson_factory()
-    lessons = await lf.get_all(course_id=course_id)
-    for lesson in lessons:
-        lesson_name = await lesson.topic
-        button = InlineKeyboardButton(text=lesson_name, callback_data=f'lesson_{lesson.id}')
-        keyboard.add(button)
+    result = await choose_lesson(callback_query)
+    if result:
+        await state.set_state(RemoveActivitySG.choose_lesson)
+    else:
+        await state.finish()
 
-    await callback_query.message.reply("Выберите урок для удаления:", reply_markup=keyboard)
     await callback_query.answer()
-
-    await state.set_state(RemoveActivitySG.choose_lesson)
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^lesson_\d+$', c.data), state=RemoveActivitySG.choose_lesson)
@@ -937,21 +911,13 @@ async def callback_remove_activity_lesson_chosen(callback_query: CallbackQuery, 
     async with state.proxy() as data:
         data["remove_activity_lesson_id"] = lesson_id
 
-    # Выбор активности
-    keyboard = InlineKeyboardMarkup()
-    af = await get_activity_factory()
-    lf = await get_lesson_factory()
-    lesson = await lf.load(lesson_id=lesson_id)
-    activities = await af.get_all(lesson=lesson)
-    for activity in activities:
-        activity_name = await activity.name
-        button = InlineKeyboardButton(text=activity_name, callback_data=f'activity_{activity.id}')
-        keyboard.add(button)
+    result = await choose_activity(callback_query)
+    if result:
+        await state.set_state(RemoveActivitySG.choose_activity)
+    else:
+        await state.finish()
 
-    await callback_query.message.reply("Выберите активность для удаления:", reply_markup=keyboard)
     await callback_query.answer()
-
-    await state.set_state(RemoveActivitySG.choose_activity)
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^activity_\d+$', c.data), state=RemoveActivitySG.choose_activity)
