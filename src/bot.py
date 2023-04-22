@@ -421,6 +421,7 @@ async def cmd_add_lesson(message: Message, state: FSMContext):
     if await state.get_state() is not None:
         await message.answer("Операция отменена")
         await state.finish()
+
     result = await choose_course(message)
     if result:
         await state.set_state(AddLessonSG.choose_course)
@@ -573,16 +574,12 @@ async def cmd_add_activity(message: Message, state: FSMContext):
     if await state.get_state() is not None:
         await message.answer("Операция отменена")
         await state.finish()
-    keyboard = InlineKeyboardMarkup()
-    cf = await get_course_factory()
-    courses = await cf.get_all()
-    for course in courses:
-        course_name = await course.name
-        button = InlineKeyboardButton(course_name, callback_data=f'course_{course.id}')
-        keyboard.add(button)
 
-    await message.reply("Выберите курс, в который хотите добавить активность", reply_markup=keyboard)
-    await state.set_state(AddActivitySG.choose_course)
+    result = await choose_course(message)
+    if result:
+        await state.set_state(AddActivitySG.choose_course)
+    else:
+        await state.finish()
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=AddActivitySG.choose_course)
@@ -653,16 +650,12 @@ async def cmd_add_join_code(message: Message, state: FSMContext):
     if await state.get_state() is not None:
         await message.answer("Операция отменена")
         await state.finish()
-    keyboard = InlineKeyboardMarkup()
-    cf = await get_course_factory()
-    courses = await cf.get_all()
-    for course in courses:
-        course_name = await course.name
-        button = InlineKeyboardButton(course_name, callback_data=f'course_{course.id}')
-        keyboard.add(button)
 
-    await message.reply("Выберите курс для создания кода подключения:", reply_markup=keyboard)
-    await state.set_state(AddJoinCodeSG.choose_course)
+    result = await choose_course(message)
+    if result:
+        await state.set_state(AddJoinCodeSG.choose_course)
+    else:
+        await state.finish()
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=AddJoinCodeSG.choose_course)
@@ -830,6 +823,7 @@ async def cmd_remove_lesson(message: Message, state: FSMContext):
     if await state.get_state() is not None:
         await message.answer("Операция отменена")
         await state.finish()
+
     result = await choose_course(message)
     if result:
         await state.set_state(RemoveLessonSG.choose_course)
@@ -902,6 +896,7 @@ async def cmd_remove_activity(message: Message, state: FSMContext):
     if await state.get_state() is not None:
         await message.answer("Операция отменена")
         await state.finish()
+
     result = await choose_course(message)
     if result:
         await state.set_state(RemoveActivitySG.choose_course)
