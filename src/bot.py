@@ -325,7 +325,11 @@ async def create_course_no_description(callback_query: CallbackQuery, state: FSM
             InlineKeyboardButton("Да", callback_data=f'yes_add_lessons_{course.id}'),
             InlineKeyboardButton("Нет", callback_data=f'no_add_lessons_{course.id}')
         )
-        await message.answer("Добавить уроки в курс?", reply_markup=kb_yes_no)
+        await message.answer(
+            "Добавить уроки в курс? "
+            "Вы всегда сможете добавить уроки позже, но не забудьте сделать это до начала сбора активности!",
+            reply_markup=kb_yes_no
+        )
     await callback_query.answer()
     await state.finish()
 
@@ -351,7 +355,11 @@ async def msg_set_course_desc(message: Message, state: FSMContext):
             InlineKeyboardButton("Да", callback_data=f'yes_add_lessons_{course.id}'),
             InlineKeyboardButton("Нет", callback_data=f'no_add_lessons_{course.id}')
         )
-        await message.answer("Добавить уроки в курс?", reply_markup=kb_yes_no)
+        await message.answer(
+            "Добавить уроки в курс? "
+            "Вы всегда сможете добавить уроки позже, но не забудьте сделать это до начала сбора активности!",
+            reply_markup=kb_yes_no
+        )
     await state.finish()
 
 
@@ -494,8 +502,39 @@ async def msg_set_lesson_period(message: Message, state: FSMContext):
             f"(обе даты включительно)",
             parse_mode=ParseMode.HTML
         )
+        kb_yes_no = InlineKeyboardMarkup()
+        kb_yes_no.add(
+            InlineKeyboardButton("Да", callback_data=f"lesson_{new_lesson.id}_yes"),
+            InlineKeyboardButton("Нет", callback_data=f"lesson_{new_lesson.id}_no")
+        )
+        # Предлагаем добавить активность
+        await message.answer(
+            "📝 Хотите добавить активность к уроку? Если да, нажмите кнопку \"Да\". Если нет, нажмите кнопку \"Нет\". "
+            "Вы всегда сможете добавить активность позже, но не забудьте сделать это до начала сбора активности!",
+            reply_markup=kb_yes_no
+        )
 
     await state.finish()
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^lesson_\d+_(yes|no)$', c.data))
+@only_for_manager
+async def callback_add_activity_to_lesson(call: CallbackQuery, state: FSMContext):
+    """Пользователь нажал на кнопку добавления активности к уроку"""
+    lesson_id = int(call.data.split("_")[1])
+    lf = await get_lesson_factory()
+    lesson = await lf.load(lesson_id)
+    if not lesson:
+        await call.answer("❗Произошла ошибка, попробуйте еще раз")
+        return
+    if call.data.endswith("yes"):
+        await call.message.answer("📝 Введите название активности")
+        await state.set_state(AddActivitySG.choose_name)
+        await state.update_data(new_activity_lesson_id=lesson_id)
+    else:
+        await call.message.answer("👌 Окей, вы всегда сможете добавить активность позже")
+        await call.message.answer("👋 До свидания!")
+        await state.finish()
 
 
 @dp.message_handler(Command("add_activity"))
