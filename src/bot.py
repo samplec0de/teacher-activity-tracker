@@ -155,6 +155,9 @@ async def msg_my_courses(message: types.Message, state: FSMContext):
 @dp.message_handler(Command('mark_activity'))
 async def cmd_mark_activity(message: types.Message, state: FSMContext):
     """Обработка команды /mark_activity для отметки активности"""
+    if await state.get_state() is not None:
+        await message.answer("Операция отменена")
+        await state.finish()
     await my_courses(message, state)
 
 
@@ -299,7 +302,7 @@ async def msg_mark_activity_hours(message: Message, state: FSMContext):
 async def cmd_cancel(message: Message, state: FSMContext):
     """Обработчик команды отмены, работает из любого состояния"""
     help_msg = await help_page(message.from_user.id)
-    await message.answer(f'Отменено. {help_msg}')
+    await message.answer(f'Операция отменена. {help_msg}')
     await state.finish()
 
 
@@ -307,6 +310,9 @@ async def cmd_cancel(message: Message, state: FSMContext):
 @only_for_manager
 async def cmd_add_course(message: Message, state: FSMContext):
     """Обработчик команды добавления курса /add_course"""
+    if await state.get_state() is not None:
+        await message.answer("Операция отменена")
+        await state.finish()
     await message.answer(
         "Хорошо, давайте добавим новый курс. Если передумаете, пишите /cancel. Как будет называться новый курс?"
     )
@@ -412,6 +418,9 @@ async def callback_add_lessons(callback_query: CallbackQuery, state: FSMContext)
 @only_for_manager
 async def cmd_add_lesson(message: Message, state: FSMContext):
     """Команда добавления урока /add_lesson"""
+    if await state.get_state() is not None:
+        await message.answer("Операция отменена")
+        await state.finish()
     result = await choose_course(message)
     if result:
         await state.set_state(AddLessonSG.choose_course)
@@ -561,6 +570,9 @@ async def callback_add_activity_to_lesson(call: CallbackQuery, state: FSMContext
 @only_for_manager
 async def cmd_add_activity(message: Message, state: FSMContext):
     """Команда добавления активности /add_activity"""
+    if await state.get_state() is not None:
+        await message.answer("Операция отменена")
+        await state.finish()
     keyboard = InlineKeyboardMarkup()
     cf = await get_course_factory()
     courses = await cf.get_all()
@@ -638,6 +650,9 @@ async def msg_set_activity_name(message: Message, state: FSMContext):
 @only_for_manager
 async def cmd_add_join_code(message: Message, state: FSMContext):
     """Команда добавления кода подключения к курсу /add_code"""
+    if await state.get_state() is not None:
+        await message.answer("Операция отменена")
+        await state.finish()
     keyboard = InlineKeyboardMarkup()
     cf = await get_course_factory()
     courses = await cf.get_all()
@@ -731,6 +746,9 @@ async def msg_set_join_code_description(message: Message, state: FSMContext):
 @only_for_manager
 async def cmd_remove_course(message: Message, state: FSMContext):
     """Команда удаления курса /remove_course"""
+    if await state.get_state() is not None:
+        await message.answer("Операция отменена")
+        await state.finish()
     keyboard = InlineKeyboardMarkup()
     cf = await get_course_factory()
     courses = await cf.get_all()
@@ -809,6 +827,9 @@ async def choose_course(message: Message) -> bool:
 @only_for_manager
 async def cmd_remove_lesson(message: Message, state: FSMContext):
     """Команда удаления урока /remove_lesson"""
+    if await state.get_state() is not None:
+        await message.answer("Операция отменена")
+        await state.finish()
     result = await choose_course(message)
     if result:
         await state.set_state(RemoveLessonSG.choose_course)
@@ -878,6 +899,9 @@ async def callback_remove_lesson_confirm_yes(callback_query: CallbackQuery, stat
 @only_for_manager
 async def cmd_remove_activity(message: Message, state: FSMContext):
     """Команда удаления активности /remove_activity"""
+    if await state.get_state() is not None:
+        await message.answer("Операция отменена")
+        await state.finish()
     result = await choose_course(message)
     if result:
         await state.set_state(RemoveActivitySG.choose_course)
