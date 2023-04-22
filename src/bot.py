@@ -218,9 +218,9 @@ async def callback_mark_activity_choose_course(callback_query: CallbackQuery, st
         await state.finish()
     else:
         await callback_query.message.reply(text="Выберите урок", reply_markup=keyboard)
-    await callback_query.answer()
+        await state.set_state(MarkActivitySG.choose_lesson)
 
-    await state.set_state(MarkActivitySG.choose_lesson)
+    await callback_query.answer()
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^lesson_\d+$', c.data), state=MarkActivitySG.choose_lesson)
@@ -241,9 +241,9 @@ async def callback_mark_activity_choose_lesson(callback_query: CallbackQuery, st
         await state.finish()
     else:
         await callback_query.message.reply(text="Выберите активность", reply_markup=keyboard)
-    await callback_query.answer()
+        await state.set_state(MarkActivitySG.choose_activity)
 
-    await state.set_state(MarkActivitySG.choose_activity)
+    await callback_query.answer()
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^activity_\d+$', c.data), state=MarkActivitySG.choose_activity)
@@ -687,8 +687,7 @@ async def cmd_remove_course(message: Message, state: FSMContext):
         await state.finish()
     else:
         await message.reply("Выберите курс для удаления:", reply_markup=keyboard)
-
-    await state.set_state(RemoveCourseSG.choose_course)
+        await state.set_state(RemoveCourseSG.choose_course)
 
 
 @dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=RemoveCourseSG.choose_course)
