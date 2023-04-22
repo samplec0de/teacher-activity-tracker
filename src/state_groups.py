@@ -55,3 +55,8 @@ class RemoveActivitySG(StatesGroup):
     choose_lesson = State()
     choose_activity = State()
     confirm = State()
+
+
+class JoinCodesListSG(StatesGroup):
+    """Группа состояний aiogram процесса просмотра списка кодов подключения к курсу"""
+    choose_course = State()

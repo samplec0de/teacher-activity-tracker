@@ -20,9 +20,10 @@ from course.join_code.join_code import CourseJoinCode
 from factory import get_teacher_factory, get_join_code_factory, get_course_factory, get_lesson_factory, \
     get_activity_factory, get_activity_record_factory
 from lesson.lesson import Lesson
+from links.teacher_telegram_link import TeacherTelegramLink
 from middleware import TypingMiddleware, FSMFinishMiddleware
 from state_groups import MarkActivitySG, AddCourseSG, AddLessonSG, AddActivitySG, AddJoinCodeSG, RemoveCourseSG, \
-    RemoveLessonSG, RemoveActivitySG
+    RemoveLessonSG, RemoveActivitySG, JoinCodesListSG
 from teacher.teacher import Teacher
 
 logging.basicConfig(level=logging.INFO)
@@ -40,6 +41,7 @@ TEACHER_COMMANDS = [
 ]
 MANAGER_HELP_MESSAGE = md.text(
     md.text('Список команд:'),
+    md.text('/join_codes - список кодов подключения к курсу'),
     md.text('/add_join_code - добавить код подключения к курсу'),
     md.text('/add_course - добавить курс'),
     md.text('/add_lesson - добавить урок в курс'),
@@ -638,6 +640,70 @@ async def msg_set_activity_name(message: Message, state: FSMContext):
             reply_markup=kb_yes_no
         )
 
+    await state.finish()
+
+
+@dp.message_handler(Command("join_codes"))
+@only_for_manager
+async def cmd_join_codes(message: Message, state: FSMContext):
+    """Команда просмотра кодов подключения к курсу /join_codes"""
+    result = await choose_course(message)
+    if result:
+        await state.set_state(JoinCodesListSG.choose_course)
+    else:
+        await state.finish()
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=JoinCodesListSG.choose_course)
+@only_for_manager
+async def callback_join_codes_course_chosen(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь выбрал курс для просмотра кодов подключения"""
+    course_id = int(callback_query.data.split('_')[1])
+    async with state.proxy() as data:
+        data["course_id"] = course_id
+
+    await callback_query.message.answer("🔎 Поиск кодов...")
+    cf = await get_course_factory()
+    course = await cf.load(course_id)
+    jcf = await get_join_code_factory()
+    join_codes = await jcf.load_by_course(course=course)
+    if not join_codes:
+        await callback_query.message.answer("❗Коды подключения к курсу не найдены")
+        await state.finish()
+        return
+
+    unactivated_codes_msg = "\n".join(
+            [
+                f"▪ {md.hcode(join_code.code)} - {md.hitalic(await join_code.comment or 'БЕЗ ПРИМЕЧАНИЯ')}"
+                for join_code in join_codes if await join_code.activated_by is None
+            ]
+        ) or "НЕТ"
+
+    tg_teacher_link: TeacherTelegramLink = TeacherTelegramLink(callback_query.bot)
+    activated_codes = []
+    for join_code in join_codes:
+        if await join_code.activated_by is None:
+            continue
+        code = md.hcode(join_code.code)
+        comment = md.hitalic(await join_code.comment_quoted or 'БЕЗ ПРИМЕЧАНИЯ')
+        activated_by: Teacher = await join_code.activated_by
+        full_name = await tg_teacher_link.get_full_name(activated_by)
+        url = f'tg://user?id={activated_by.id}'
+        activated_codes.append(f"▪ {code} - {comment} (активировал {md.hlink(full_name, url)})")
+    activated_codes_msg = "\n".join(activated_codes) or "НЕТ"
+
+    await callback_query.message.answer(
+        md.text(
+            f"🔑 Список кодов подключения к курсу {await course.name_quoted}",
+            "",
+            "Не активированные:",
+            unactivated_codes_msg,
+            "Активированные:",
+            activated_codes_msg,
+            sep="\n"
+        ),
+        parse_mode=ParseMode.HTML
+    )
     await state.finish()
 
 
