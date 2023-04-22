@@ -1,5 +1,6 @@
 import datetime
 import logging
+import os
 import re
 from typing import Tuple
 
@@ -26,7 +27,7 @@ from teacher.teacher import Teacher
 
 logging.basicConfig(level=logging.INFO)
 
-bot = Bot(token='5952854813:AAFemh5A5MbK_EBZB8p7BBjDnYvWpjav-Eo')
+bot = Bot(token=os.environ.get('BOT_TOKEN'))
 dp = Dispatcher(bot, storage=MemoryStorage())
 dp.middleware.setup(TypingMiddleware())
 dp.middleware.setup(FSMFinishMiddleware(dispatcher=dp))
