@@ -215,6 +215,7 @@ async def callback_mark_activity_choose_course(callback_query: CallbackQuery, st
 
     if len(lessons) == 0:
         await callback_query.message.reply(text="У курса нет уроков")
+        await state.finish()
     else:
         await callback_query.message.reply(text="Выберите урок", reply_markup=keyboard)
     await callback_query.answer()
@@ -235,7 +236,11 @@ async def callback_mark_activity_choose_lesson(callback_query: CallbackQuery, st
         button = InlineKeyboardButton(activity_topic, callback_data=f'activity_{activity.id}')
         keyboard.add(button)
 
-    await callback_query.message.reply(text="Выберите активность", reply_markup=keyboard)
+    if len(activities) == 0:
+        await callback_query.message.reply(text="У урока нет активностей")
+        await state.finish()
+    else:
+        await callback_query.message.reply(text="Выберите активность", reply_markup=keyboard)
     await callback_query.answer()
 
     await state.set_state(MarkActivitySG.choose_activity)
@@ -677,7 +682,12 @@ async def cmd_remove_course(message: Message, state: FSMContext):
         button = InlineKeyboardButton(course_name, callback_data=f'course_{course.id}')
         keyboard.add(button)
 
-    await message.reply("Выберите курс для удаления:", reply_markup=keyboard)
+    if len(courses) == 0:
+        await message.reply("В системе нет ни одного курса.")
+        await state.finish()
+    else:
+        await message.reply("Выберите курс для удаления:", reply_markup=keyboard)
+
     await state.set_state(RemoveCourseSG.choose_course)
 
 
@@ -892,6 +902,22 @@ async def callback_remove_activity_confirm_yes(callback_query: CallbackQuery, st
     await callback_query.answer()
 
     await state.finish()
+
+
+@dp.message_handler(lambda message: message.text.startswith('/'))
+async def unknown_command(message: types.Message):
+    await message.reply(
+        "Что-то пошло не так, я вас не понял. "
+        "Пожалуйста, попробуйте еще раз или отмените запрос с помощью /cancel."
+    )
+
+
+@dp.message_handler(content_types=types.ContentType.ANY)
+async def unknown_handler(message: types.Message):
+    await message.reply(
+        "Что-то пошло не так, я вас не понял. "
+        "Пожалуйста, введите команду или отмените текущую операцию с помощью /cancel."
+    )
 
 
 if __name__ == '__main__':
