@@ -92,3 +92,11 @@ class EditLessonSG(StatesGroup):
     choose_action = State()
     edit_topic = State()
     edit_period = State()
+
+
+class EditActivitySG(StatesGroup):
+    """Группа состояний aiogram процесса редактирования активности"""
+    choose_course = State()
+    choose_lesson = State()
+    choose_activity = State()
+    edit_name = State()

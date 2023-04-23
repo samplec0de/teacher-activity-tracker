@@ -19,9 +19,8 @@ class Activity(ABC):
         """Название активности"""
         pass
 
-    @name.setter
     @abstractmethod
-    async def name(self, value) -> None:
+    async def set_name(self, value) -> None:
         """Изменение названия активности"""
         pass
 

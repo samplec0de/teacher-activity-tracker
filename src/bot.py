@@ -26,7 +26,8 @@ from links.teacher_telegram_link import TeacherTelegramLink
 from middleware import TypingMiddleware, FSMFinishMiddleware
 from report.excel.excel_report_generator import ReportGenerator
 from state_groups import MarkActivitySG, AddCourseSG, AddLessonSG, AddActivitySG, AddJoinCodeSG, RemoveCourseSG, \
-    RemoveLessonSG, RemoveActivitySG, JoinCodesListSG, RemoveJoinCodeSG, ReportSG, EditCourseSG, EditLessonSG
+    RemoveLessonSG, RemoveActivitySG, JoinCodesListSG, RemoveJoinCodeSG, ReportSG, EditCourseSG, EditLessonSG, \
+    EditActivitySG
 from teacher.teacher import Teacher
 
 logging.basicConfig(level=logging.INFO)
@@ -51,7 +52,8 @@ MANAGER_HELP_MESSAGE = md.text(
     md.text('/add_lesson - добавить урок в курс'),
     md.text('/add_activity - добавить активность в урок по курсу'),
     md.text('/edit_course - редактировать курс'),
-    md.text('/edit_lesson - редактировать курс'),
+    md.text('/edit_lesson - редактировать урок'),
+    md.text('/edit_activity - редактировать активность'),
     md.text('/remove_join_code - удалить код подключения к курсу'),
     md.text('/remove_course - удалить курс'),
     md.text('/remove_lesson - удалить урок'),
@@ -1403,6 +1405,58 @@ async def edit_lesson_period(message: Message, state: FSMContext):
     await lesson.set_date_to(date_to)
     period = f'{(await lesson.date_from).strftime("%d.%m.%Y")}-{(await lesson.date_to).strftime("%d.%m.%Y")}'
     await message.reply(f"Период сбора активности изменен:\n{md.hcode(period)}", parse_mode=ParseMode.HTML)
+    await state.finish()
+
+
+@dp.message_handler(Command("edit_activity"))
+@only_for_manager
+async def cmd_edit_activity(message: Message, state: FSMContext):
+    """Команда редактирования активности /edit_activity"""
+    await choose_course(message)
+    await state.set_state(EditActivitySG.choose_course)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=EditActivitySG.choose_course)
+@only_for_manager
+async def callback_edit_activity_choose_course(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь выбрал курс для редактирования активности"""
+    await callback_query.answer()
+    course_id = int(callback_query.data.split('_')[1])
+    await state.update_data(course_id=course_id)
+    await choose_lesson(callback_query)
+    await state.set_state(EditActivitySG.choose_lesson)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^lesson_\d+$', c.data), state=EditActivitySG.choose_lesson)
+@only_for_manager
+async def callback_edit_activity_choose_lesson(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь выбрал урок для редактирования активности"""
+    await callback_query.answer()
+    lesson_id = int(callback_query.data.split('_')[1])
+    await state.update_data(lesson_id=lesson_id)
+    await choose_activity(callback_query)
+    await state.set_state(EditActivitySG.choose_activity)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^activity_\d+$', c.data), state=EditActivitySG.choose_activity)
+@only_for_manager
+async def callback_edit_activity_choose_activity(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь выбрал активность для редактирования"""
+    await callback_query.answer()
+    activity_id = int(callback_query.data.split('_')[1])
+    await state.update_data(activity_id=activity_id)
+    await callback_query.message.reply("Введите новое название активности:")
+    await state.set_state(EditActivitySG.edit_name)
+
+
+@dp.message_handler(state=EditActivitySG.edit_name)
+@only_for_manager
+async def edit_activity_name(message: Message, state: FSMContext):
+    """Пользователь ввел новое название активности"""
+    activity_id = (await state.get_data())['activity_id']
+    activity = await (await get_activity_factory()).load(activity_id=activity_id)
+    await activity.set_name(message.text)
+    await message.reply(f"Название активности изменено:\n{md.hbold(message.text)}", parse_mode=ParseMode.HTML)
     await state.finish()
 
 

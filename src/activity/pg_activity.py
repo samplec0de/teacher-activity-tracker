@@ -13,8 +13,7 @@ class PGActivity(PGObject, Activity):
     async def name(self) -> str:
         return await self._get_single_attribute('name')
 
-    @name.setter
-    async def name(self, value) -> None:
+    async def set_name(self, value) -> None:
         await self._set_single_attribute('name', value)
 
     @property
