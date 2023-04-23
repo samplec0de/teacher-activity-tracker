@@ -11,3 +11,12 @@ services:
       - "5435:5432"
     env_file:
       - postgres.env
+
+  bot:
+    build: .
+    restart: always
+    depends_on:
+      - postgresql
+    env_file:
+      - bot.env
+      - postgres.env

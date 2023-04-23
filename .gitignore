@@ -1,6 +1,7 @@
 # exclude database files
 db-data/
 postgres.env
+bot.env
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

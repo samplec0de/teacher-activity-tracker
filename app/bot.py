@@ -1493,7 +1493,7 @@ async def unknown_command(message: types.Message):
     )
 
 
-@dp.callback_query_handler()
+@dp.callback_query_handler(state='*')
 async def unknown_handler(callback_query: CallbackQuery):
     await callback_query.message.reply(
         "Кнопка устарела. Помощь по командам /help."
