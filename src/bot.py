@@ -1544,7 +1544,7 @@ async def send_reminders(bot: Bot, time_before_deadline: datetime.timedelta) -> 
     lessons: List[Lesson] = await (await get_lesson_factory()).get_all()
     for lesson in lessons:
         deadline = await lesson.date_to
-        if now + time_before_deadline >= deadline > now or True:
+        if now + time_before_deadline >= deadline > now:
             real_delta = deadline - now
             # Отправка напоминания об окончании сбора активности
             message_text = f"Напоминание: сбор активности по уроку '{md.hbold(await lesson.topic)}' " \
