@@ -1187,6 +1187,56 @@ async def callback_report_new(callback_query: CallbackQuery, state: FSMContext):
     await state.finish()
 
 
+@dp.callback_query_handler(lambda c: re.match(r'^list$', c.data), state=ReportSG.choose_action)
+@only_for_manager
+async def callback_report_list(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь выбрал список отчетов"""
+    await callback_query.answer()
+
+    excel_persistence_factory = await get_excel_report_persistence_factory()
+    reports = await excel_persistence_factory.get_all()
+
+    if not reports:
+        await callback_query.message.reply("Список отчетов пуст.")
+        await state.finish()
+        return
+
+    kb_reports = InlineKeyboardMarkup()
+    for report in reports:
+        kb_reports.add(
+            InlineKeyboardButton(
+                (await report.created_at).strftime('%d.%m.%Y %H:%M:%S'),
+                callback_data=f'report_{report.id}'
+            )
+        )
+
+    await callback_query.message.reply("Выберите отчет:", reply_markup=kb_reports)
+    await state.set_state(ReportSG.choose_report)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^report_\d+$', c.data), state=ReportSG.choose_report)
+@only_for_manager
+async def callback_report_chosen(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь выбрал отчет"""
+    await callback_query.answer()
+    await callback_query.bot.send_chat_action(callback_query.message.chat.id, ChatActions.UPLOAD_DOCUMENT)
+
+    report_id = int(callback_query.data.split('_')[1])
+    excel_persistence_factory = await get_excel_report_persistence_factory()
+    report = await excel_persistence_factory.load(report_id=report_id)
+
+    bytes_stream = io.BytesIO()
+    workbook = await report.get_workbook()
+    workbook.save(bytes_stream)
+    bytes_stream.seek(0)
+
+    created_at = await report.created_at
+    filename = f"courses_report_{created_at.strftime('%d.%m.%Y_%H-%M-%S')}.xlsx"
+
+    await callback_query.message.answer_document(types.InputFile(bytes_stream, filename))
+    await state.finish()
+
+
 @dp.message_handler(lambda message: message.text.startswith('/'))
 async def unknown_command(message: types.Message):
     await message.reply(

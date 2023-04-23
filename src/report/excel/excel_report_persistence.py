@@ -25,6 +25,6 @@ class ExcelReportPersistence:
         pass
 
     @abstractmethod
-    async def save_report(self, report: Workbook) -> None:
+    async def save_report(self) -> None:
         """Сохранить отчет"""
         pass

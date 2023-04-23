@@ -18,3 +18,8 @@ class ExcelReportPersistenceFactory:
 
     async def load(self, report_id: int) -> ExcelReportPersistence:
         return PGExcelReportPersistence(report_id=report_id, pool=self._pool)
+
+    async def get_all(self) -> list[ExcelReportPersistence]:
+        async with self._pool.acquire() as conn:
+            report_ids = await conn.fetch('SELECT report_id FROM excel_reports')
+        return [await self.load(report_id['report_id']) for report_id in report_ids]

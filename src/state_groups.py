@@ -74,3 +74,4 @@ class ReportSG(StatesGroup):
     choose_action = State()
     list_report = State()
     new_report = State()
+    choose_report = State()
