@@ -1,5 +1,5 @@
 from activity.activity_factory import ActivityFactory
-from activity.record.pg_activity_record_factory import ActivityRecordFactory
+from activity.record.activity_record_factory import ActivityRecordFactory
 from course.course_factory import CourseFactory
 from course.join_code.join_code_factory import CourseJoinCodeFactory
 from database import get_pool

@@ -1,7 +1,7 @@
 import asyncpg
 
 from activity.activity import Activity
-from activity.record.pg_activity_record_factory import ActivityRecordFactory
+from activity.record.activity_record_factory import ActivityRecordFactory
 from database import get_pool
 from teacher.teacher import Teacher
 

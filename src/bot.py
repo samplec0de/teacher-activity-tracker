@@ -50,6 +50,7 @@ MANAGER_HELP_MESSAGE = md.text(
     md.text('/add_course - добавить курс'),
     md.text('/add_lesson - добавить урок в курс'),
     md.text('/add_activity - добавить активность в урок по курсу'),
+    md.text('/edit_course - редактировать курс'),
     md.text('/remove_join_code - удалить код подключения к курсу'),
     md.text('/remove_course - удалить курс'),
     md.text('/remove_lesson - удалить урок'),
