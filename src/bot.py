@@ -5,7 +5,9 @@ import os
 import re
 from typing import Tuple, List
 
+import aiocron
 import aiogram.utils.markdown as md
+import pytz
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
@@ -20,8 +22,9 @@ from course.course import Course
 from course.join_code.join_code import CourseJoinCode
 from factory import get_teacher_factory, get_join_code_factory, get_course_factory, get_lesson_factory, \
     get_activity_factory, get_activity_record_factory, get_teacher_activity_link_factory, \
-    get_course_teacher_link_factory, get_excel_report_persistence_factory
+    get_course_teacher_link_factory, get_excel_report_persistence_factory, get_teacher_lesson_link_factory
 from lesson.lesson import Lesson
+from links.teacher_lesson_link import TeacherLessonLink
 from links.teacher_telegram_link import TeacherTelegramLink
 from middleware import TypingMiddleware, FSMFinishMiddleware
 from report.excel.excel_report_generator import ReportGenerator
@@ -1495,6 +1498,77 @@ async def unknown_handler(callback_query: CallbackQuery):
     await callback_query.message.reply(
         "Кнопка устарела. Помощь по командам /help."
     )
+
+
+def timedelta_to_russian_str(delta: datetime.timedelta) -> str:
+    seconds = int(delta.total_seconds())
+    minutes, seconds = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    days, hours = divmod(hours, 24)
+
+    parts = []
+    if days > 0:
+        suffix = 'ей' \
+            if days % 10 != 1 or days % 100 == 11 \
+            else 'ь' \
+            if days % 10 == 1 \
+            else 'я'
+        parts.append(f"{days} дн{suffix}")
+    if hours > 0:
+        suffix = 'ов' \
+            if hours % 10 == 0 or 5 <= hours % 10 <= 9 or 11 <= hours % 100 <= 14 \
+            else '' \
+            if hours % 10 == 1\
+            else 'а'
+        parts.append(f"{hours} час{suffix}")
+    if minutes > 0:
+        suffix = 'у' \
+            if minutes % 10 == 1 and minutes % 100 != 11 \
+            else 'ы' \
+            if 1 < minutes % 10 < 5 and (minutes % 100 < 10 or minutes % 100 > 20) \
+            else ''
+        parts.append(f"{minutes} минут{suffix}")
+    if seconds > 0:
+        suffix = 'у' \
+            if seconds % 10 == 1 and seconds % 100 != 11\
+            else 'ы' \
+            if 1 < seconds % 10 < 5 and (seconds % 100 < 10 or seconds % 100 > 20)\
+            else ''
+        parts.append(f"{seconds} секунд{suffix}")
+
+    return ", ".join(parts)
+
+
+async def send_reminders(bot: Bot, time_before_deadline: datetime.timedelta) -> None:
+    now = datetime.datetime.now().astimezone(pytz.UTC)
+    lessons: List[Lesson] = await (await get_lesson_factory()).get_all()
+    for lesson in lessons:
+        deadline = await lesson.date_to
+        if now + time_before_deadline >= deadline > now or True:
+            real_delta = deadline - now
+            # Отправка напоминания об окончании сбора активности
+            message_text = f"Напоминание: сбор активности по уроку '{md.hbold(await lesson.topic)}' " \
+                           f"курса '{md.hbold(await (await lesson.course).name)}' " \
+                           f"заканчивается через {timedelta_to_russian_str(real_delta)}."
+            teacher_lesson_link: TeacherLessonLink = await (await get_teacher_lesson_link_factory()).create()
+            teachers: List[Teacher] = await teacher_lesson_link.get_teachers_by_lesson(lesson)
+            for teacher in teachers:
+                await bot.send_message(teacher.id, message_text, parse_mode=ParseMode.HTML)
+
+
+@aiocron.crontab('*/30 * * * *')
+async def check_lessons_30min():
+    await send_reminders(bot, datetime.timedelta(minutes=30))
+
+
+@aiocron.crontab('0 */3 * * *')
+async def check_lessons_3hours():
+    await send_reminders(bot, datetime.timedelta(hours=3))
+
+
+@aiocron.crontab('0 */24 * * *')
+async def check_lessons_24hours():
+    await send_reminders(bot, datetime.timedelta(days=1))
 
 
 if __name__ == '__main__':

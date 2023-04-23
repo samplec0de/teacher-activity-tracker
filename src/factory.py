@@ -6,6 +6,7 @@ from database import get_pool
 from lesson.lesson_factory import LessonFactory
 from links.course_teacher_link import CourseTeacherLinkFactory
 from links.teacher_activity_link import PGTeacherActivityLink, TeacherActivityLink, TeacherActivityLinkFactory
+from links.teacher_lesson_link import TeacherLessonLinkFactory
 from report.excel.excel_report_persistence_factory import ExcelReportPersistenceFactory
 from teacher.teacher_factory import TeacherFactory
 
@@ -18,6 +19,7 @@ activity_record_factory = None
 teacher_activity_link_factory = None
 course_teacher_link_factory = None
 excel_report_persistence_factory = None
+teacher_lesson_link_factory = None
 
 
 async def get_join_code_factory() -> CourseJoinCodeFactory:
@@ -90,3 +92,11 @@ async def get_excel_report_persistence_factory() -> ExcelReportPersistenceFactor
     if excel_report_persistence_factory is None:
         excel_report_persistence_factory = ExcelReportPersistenceFactory(pool=await get_pool())
     return excel_report_persistence_factory
+
+
+async def get_teacher_lesson_link_factory() -> TeacherLessonLinkFactory:
+    """Связь между учителями и уроками"""
+    global teacher_lesson_link_factory
+    if teacher_lesson_link_factory is None:
+        teacher_lesson_link_factory = TeacherLessonLinkFactory(pool=await get_pool())
+    return teacher_lesson_link_factory

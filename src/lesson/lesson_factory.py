@@ -27,12 +27,13 @@ class LessonFactory:
             lesson_id = await conn.fetchval(query, course_id, topic, date_from, date_to)
             return PGLesson(lesson_id=lesson_id, pool=self._pool)
 
-    async def get_all(self, course_id: int) -> list[Lesson]:
+    async def get_all(self, course_id: Optional[int] = None) -> list[Lesson]:
         """Получение всех уроков курса"""
         async with self._pool.acquire() as conn:
-            query = f'SELECT lesson_id FROM lessons WHERE course_id=$1;'
-            lesson_ids = await conn.fetch(query, course_id)
-            lessons = []
-            for row in lesson_ids:
-                lessons.append(PGLesson(lesson_id=row['lesson_id'], pool=self._pool))
-            return lessons
+            if course_id is None:
+                query = f'SELECT lesson_id FROM lessons;'
+                lesson_ids = await conn.fetch(query)
+            else:
+                query = f'SELECT lesson_id FROM lessons WHERE course_id=$1;'
+                lesson_ids = await conn.fetch(query, course_id)
+            return [PGLesson(lesson_id=row['lesson_id'], pool=self._pool) for row in lesson_ids]
