@@ -30,7 +30,7 @@ from middleware import TypingMiddleware, FSMFinishMiddleware
 from report.excel.excel_report_generator import ReportGenerator
 from state_groups import MarkActivitySG, AddCourseSG, AddLessonSG, AddActivitySG, AddJoinCodeSG, RemoveCourseSG, \
     RemoveLessonSG, RemoveActivitySG, JoinCodesListSG, RemoveJoinCodeSG, ReportSG, EditCourseSG, EditLessonSG, \
-    EditActivitySG
+    EditActivitySG, GiveMeThePowerSG
 from teacher.teacher import Teacher
 
 logging.basicConfig(level=logging.INFO)
@@ -1483,6 +1483,26 @@ async def edit_activity_name(message: Message, state: FSMContext):
     activity = await (await get_activity_factory()).load(activity_id=activity_id)
     await activity.set_name(message.text)
     await message.reply(f"Название активности изменено:\n{md.hbold(message.text)}", parse_mode=ParseMode.HTML)
+    await state.finish()
+
+
+@dp.message_handler(Command("give_me_the_power"))
+async def cmd_give_me_the_power(message: Message, state: FSMContext):
+    """Команда получения прав администратора /give_me_the_power"""
+    await message.reply("Введите пароль:")
+    await state.set_state(GiveMeThePowerSG.enter_password)
+
+
+@dp.message_handler(state=GiveMeThePowerSG.enter_password)
+async def give_me_the_power(message: Message, state: FSMContext):
+    """Пользователь ввел пароль"""
+    password = message.text
+    if password == os.environ.get("ADMIN_PASSWORD"):
+        await message.reply("Пароль верный. Вы получили права администратора.")
+        teacher: Teacher = await (await get_teacher_factory()).load(teacher_id=message.from_user.id)
+        await teacher.make_manager()
+    else:
+        await message.reply("Пароль неверный.")
     await state.finish()
 
 

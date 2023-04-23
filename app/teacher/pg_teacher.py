@@ -42,3 +42,6 @@ class PGTeacher(PGObject, Teacher):
     @property
     async def is_manager(self) -> bool:
         return await self._get_single_attribute('is_manager')
+
+    async def make_manager(self) -> None:
+        await self._set_single_attribute('is_manager', True)

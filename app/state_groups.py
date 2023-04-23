@@ -100,3 +100,8 @@ class EditActivitySG(StatesGroup):
     choose_lesson = State()
     choose_activity = State()
     edit_name = State()
+
+
+class GiveMeThePowerSG(StatesGroup):
+    """Группа состояний aiogram процесса получения прав администратора"""
+    enter_password = State()

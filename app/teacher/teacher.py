@@ -49,3 +49,8 @@ class Teacher(ABC):
     async def is_manager(self) -> bool:
         """Является ли учитель менеджером"""
         pass
+
+    @abstractmethod
+    async def make_manager(self) -> None:
+        """Делает учителя менеджером"""
+        pass
