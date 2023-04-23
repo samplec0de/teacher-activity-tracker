@@ -30,3 +30,12 @@ class PGTeacherActivityLink(TeacherActivityLink):
             activity_record = await activity_record_factory.load(record['record_id'])
             hours += (await activity_record.hours) or 0
         return hours
+
+
+class TeacherActivityLinkFactory:
+
+    def __init__(self, pool: asyncpg.Pool):
+        self._pool = pool
+
+    async def create(self) -> TeacherActivityLink:
+        return PGTeacherActivityLink(pool=self._pool)

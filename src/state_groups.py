@@ -67,3 +67,10 @@ class RemoveJoinCodeSG(StatesGroup):
     choose_course = State()
     choose_code = State()
     confirm = State()
+
+
+class ReportSG(StatesGroup):
+    """Группа состояний aiogram процесса получения отчета"""
+    choose_action = State()
+    list_report = State()
+    new_report = State()

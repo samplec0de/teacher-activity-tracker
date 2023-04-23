@@ -1,4 +1,5 @@
 import datetime
+import io
 import logging
 import os
 import re
@@ -10,7 +11,7 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import CommandStart, Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, \
-    CallbackQuery, Message, ParseMode, BotCommand
+    CallbackQuery, Message, ParseMode, BotCommand, ChatActions
 from aiogram.utils import executor
 
 import admin_client
@@ -18,12 +19,14 @@ from activity.activity import Activity
 from course.course import Course
 from course.join_code.join_code import CourseJoinCode
 from factory import get_teacher_factory, get_join_code_factory, get_course_factory, get_lesson_factory, \
-    get_activity_factory, get_activity_record_factory
+    get_activity_factory, get_activity_record_factory, get_teacher_activity_link_factory, \
+    get_course_teacher_link_factory, get_excel_report_persistence_factory
 from lesson.lesson import Lesson
 from links.teacher_telegram_link import TeacherTelegramLink
 from middleware import TypingMiddleware, FSMFinishMiddleware
+from report.excel.excel_report_generator import ReportGenerator
 from state_groups import MarkActivitySG, AddCourseSG, AddLessonSG, AddActivitySG, AddJoinCodeSG, RemoveCourseSG, \
-    RemoveLessonSG, RemoveActivitySG, JoinCodesListSG, RemoveJoinCodeSG
+    RemoveLessonSG, RemoveActivitySG, JoinCodesListSG, RemoveJoinCodeSG, ReportSG
 from teacher.teacher import Teacher
 
 logging.basicConfig(level=logging.INFO)
@@ -41,6 +44,7 @@ TEACHER_COMMANDS = [
 ]
 MANAGER_HELP_MESSAGE = md.text(
     md.text('Список команд:'),
+    md.text('/generate_report - получить отчет по всем курсам'),
     md.text('/join_codes - список кодов подключения к курсу'),
     md.text('/add_join_code - добавить код подключения к курсу'),
     md.text('/add_course - добавить курс'),
@@ -1139,6 +1143,50 @@ async def callback_remove_activity_confirm_yes(callback_query: CallbackQuery, st
 
     await callback_query.answer()
 
+    await state.finish()
+
+
+@dp.message_handler(Command(["report", "generate_report"]))
+@only_for_manager
+async def cmd_report(message: Message, state: FSMContext):
+    """Команда получения отчета /generate_report"""
+    kb_list_or_new = InlineKeyboardMarkup().add(
+        InlineKeyboardButton("Список отчетов", callback_data=f'list'),
+        InlineKeyboardButton("Создать отчет", callback_data=f'new')
+    )
+    await message.reply("Выберите действие:", reply_markup=kb_list_or_new)
+    await state.set_state(ReportSG.choose_action)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^new$', c.data), state=ReportSG.choose_action)
+@only_for_manager
+async def callback_report_new(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь выбрал создание отчета"""
+    await callback_query.answer()
+    await callback_query.bot.send_chat_action(callback_query.message.chat.id, ChatActions.UPLOAD_DOCUMENT)
+    cf = await get_course_factory()
+    teacher_tg_link = TeacherTelegramLink(bot=callback_query.bot)
+    teacher_activity_link = await (await get_teacher_activity_link_factory()).create()
+    course_teacher_link = await (await get_course_teacher_link_factory()).create()
+    generator = ReportGenerator(
+        course_factory=cf,
+        teacher_tg_link=teacher_tg_link,
+        teacher_activity_link=teacher_activity_link,
+        course_teacher_link=course_teacher_link,
+    )
+
+    workbook = await generator.generate_report()
+    excel_persistence_factory = await get_excel_report_persistence_factory()
+    excel_persistence = await excel_persistence_factory.create(workbook=workbook)
+
+    bytes_stream = io.BytesIO()
+    workbook.save(bytes_stream)
+    bytes_stream.seek(0)
+
+    created_at = await excel_persistence.created_at
+    filename = f"courses_report_{created_at.strftime('%d.%m.%Y_%H-%M-%S')}.xlsx"
+
+    await callback_query.message.answer_document(types.InputFile(bytes_stream, filename))
     await state.finish()
 
 

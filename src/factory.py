@@ -4,6 +4,9 @@ from course.course_factory import CourseFactory
 from course.join_code.join_code_factory import CourseJoinCodeFactory
 from database import get_pool
 from lesson.lesson_factory import LessonFactory
+from links.course_teacher_link import CourseTeacherLinkFactory
+from links.teacher_activity_link import PGTeacherActivityLink, TeacherActivityLink, TeacherActivityLinkFactory
+from report.excel.excel_report_persistence_factory import ExcelReportPersistenceFactory
 from teacher.teacher_factory import TeacherFactory
 
 join_code_factory = None
@@ -12,6 +15,9 @@ course_factory = None
 lesson_factory = None
 activity_factory = None
 activity_record_factory = None
+teacher_activity_link_factory = None
+course_teacher_link_factory = None
+excel_report_persistence_factory = None
 
 
 async def get_join_code_factory() -> CourseJoinCodeFactory:
@@ -60,3 +66,27 @@ async def get_activity_record_factory() -> ActivityRecordFactory:
     if activity_record_factory is None:
         activity_record_factory = ActivityRecordFactory(pool=await get_pool())
     return activity_record_factory
+
+
+async def get_teacher_activity_link_factory() -> TeacherActivityLinkFactory:
+    """Связь между учителями и активностями"""
+    global teacher_activity_link_factory
+    if teacher_activity_link_factory is None:
+        teacher_activity_link_factory = TeacherActivityLinkFactory(pool=await get_pool())
+    return teacher_activity_link_factory
+
+
+async def get_course_teacher_link_factory() -> CourseTeacherLinkFactory:
+    """Связь между курсами и учителями"""
+    global course_teacher_link_factory
+    if course_teacher_link_factory is None:
+        course_teacher_link_factory = CourseTeacherLinkFactory(pool=await get_pool())
+    return course_teacher_link_factory
+
+
+async def get_excel_report_persistence_factory() -> ExcelReportPersistenceFactory:
+    """Фабрика отчетов Excel"""
+    global excel_report_persistence_factory
+    if excel_report_persistence_factory is None:
+        excel_report_persistence_factory = ExcelReportPersistenceFactory(pool=await get_pool())
+    return excel_report_persistence_factory
