@@ -124,7 +124,7 @@ async def help_page(teacher_id: int):
 
 
 @dp.message_handler(Command('help'), state='*')
-async def help_command(message: types.Message, state: FSMContext):
+async def help_command(message: types.Message):
     """Обработка команды /help для вывода списка доступных команд"""
     await message.answer(await help_page(message.from_user.id))
 
@@ -767,9 +767,6 @@ async def callback_remove_join_code_course_chosen(callback_query: CallbackQuery,
 @only_for_manager
 async def callback_remove_join_code_code_chosen(callback_query: CallbackQuery, state: FSMContext):
     """Пользователь выбрал код для удаления"""
-    async with state.proxy() as data:
-        course_id = data["course_id"]
-
     code = callback_query.data.split('_')[2]
     jcf = await get_join_code_factory()
     join_code = await jcf.load(code)
