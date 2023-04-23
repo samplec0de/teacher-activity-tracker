@@ -1190,8 +1190,7 @@ async def callback_report_new(callback_query: CallbackQuery, state: FSMContext):
 @dp.message_handler(lambda message: message.text.startswith('/'))
 async def unknown_command(message: types.Message):
     await message.reply(
-        "Что-то пошло не так, я вас не понял. "
-        "Пожалуйста, попробуйте еще раз или отмените запрос с помощью /cancel."
+        "Неизвестная команда. Помощь по командам /help."
     )
 
 
@@ -1199,7 +1198,7 @@ async def unknown_command(message: types.Message):
 async def unknown_handler(callback_query: CallbackQuery):
     await callback_query.answer("Ошибка")
     await callback_query.message.reply(
-        "Кнопка устарела. Пожалуйста, введите команду или отмените текущую операцию /cancel. Помощь по командам /help."
+        "Кнопка устарела. Помощь по командам /help."
     )
 
 
