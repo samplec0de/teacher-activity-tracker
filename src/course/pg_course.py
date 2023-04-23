@@ -17,9 +17,15 @@ class PGCourse(PGObject, Course):
     async def name(self):
         return await self._get_single_attribute('name')
 
-    @name.setter
-    async def name(self, value):
+    async def set_name(self, value):
         await self._set_single_attribute('name', value)
+
+    @property
+    async def description(self):
+        return await self._get_single_attribute('description')
+
+    async def set_description(self, value):
+        await self._set_single_attribute('description', value)
 
     @property
     async def lessons(self) -> Tuple[Lesson, ...]:

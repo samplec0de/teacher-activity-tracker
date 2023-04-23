@@ -26,7 +26,7 @@ from links.teacher_telegram_link import TeacherTelegramLink
 from middleware import TypingMiddleware, FSMFinishMiddleware
 from report.excel.excel_report_generator import ReportGenerator
 from state_groups import MarkActivitySG, AddCourseSG, AddLessonSG, AddActivitySG, AddJoinCodeSG, RemoveCourseSG, \
-    RemoveLessonSG, RemoveActivitySG, JoinCodesListSG, RemoveJoinCodeSG, ReportSG
+    RemoveLessonSG, RemoveActivitySG, JoinCodesListSG, RemoveJoinCodeSG, ReportSG, EditCourseSG
 from teacher.teacher import Teacher
 
 logging.basicConfig(level=logging.INFO)
@@ -1234,6 +1234,76 @@ async def callback_report_chosen(callback_query: CallbackQuery, state: FSMContex
     filename = f"courses_report_{created_at.strftime('%d.%m.%Y_%H-%M-%S')}.xlsx"
 
     await callback_query.message.answer_document(types.InputFile(bytes_stream, filename))
+    await state.finish()
+
+
+@dp.message_handler(Command("edit_course"))
+@only_for_manager
+async def cmd_edit_course(message: Message, state: FSMContext):
+    """Команда редактирования курса /edit_course"""
+    await choose_course(message)
+    await state.set_state(EditCourseSG.choose_course)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=EditCourseSG.choose_course)
+@only_for_manager
+async def callback_edit_course_chosen(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь выбрал курс для редактирования"""
+    await callback_query.answer()
+    course_id = int(callback_query.data.split('_')[1])
+    await state.update_data(course_id=course_id)
+    kb_edit_course = InlineKeyboardMarkup()
+    kb_edit_course.add(
+        InlineKeyboardButton("Изменить название", callback_data=f'edit_name'),
+        InlineKeyboardButton("Изменить описание", callback_data=f'edit_description'),
+    )
+    await callback_query.message.reply("Выберите действие:", reply_markup=kb_edit_course)
+    await state.set_state(EditCourseSG.choose_action)
+
+
+@dp.callback_query_handler(
+    lambda c: re.match(r'^(edit_name|edit_description)$', c.data), state=EditCourseSG.choose_action
+)
+@only_for_manager
+async def callback_edit_course_action(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь выбрал действие для редактирования курса"""
+    await callback_query.answer()
+    action = callback_query.data
+    course_id = (await state.get_data())['course_id']
+    course = await (await get_course_factory()).load(course_id=course_id)
+    info_msg = md.text(
+        md.text("Название: ", md.hbold(await course.name)),
+        md.text("Описание: ", md.hcode(await course.description)),
+        sep='\n',
+    )
+    await callback_query.message.reply(info_msg, parse_mode=ParseMode.HTML)
+    if action == 'edit_name':
+        await callback_query.message.reply("Введите новое название курса:")
+        await state.set_state(EditCourseSG.edit_name)
+    elif action == 'edit_description':
+        await callback_query.message.reply("Введите новое описание курса:")
+        await state.set_state(EditCourseSG.edit_description)
+
+
+@dp.message_handler(state=EditCourseSG.edit_name)
+@only_for_manager
+async def edit_course_name(message: Message, state: FSMContext):
+    """Пользователь ввел новое название курса"""
+    course_id = (await state.get_data())['course_id']
+    course = await (await get_course_factory()).load(course_id=course_id)
+    await course.set_name(message.text)
+    await message.reply(f"Название курса изменено:\n{md.hbold(message.text)}", parse_mode=ParseMode.HTML)
+    await state.finish()
+
+
+@dp.message_handler(state=EditCourseSG.edit_description)
+@only_for_manager
+async def edit_course_description(message: Message, state: FSMContext):
+    """Пользователь ввел новое описание курса"""
+    course_id = (await state.get_data())['course_id']
+    course = await (await get_course_factory()).load(course_id=course_id)
+    await course.set_description(message.text)
+    await message.reply(f"Описание курса изменено:\n{md.hcode(message.text)}", parse_mode=ParseMode.HTML)
     await state.finish()
 
 

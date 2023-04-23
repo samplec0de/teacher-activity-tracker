@@ -75,3 +75,11 @@ class ReportSG(StatesGroup):
     list_report = State()
     new_report = State()
     choose_report = State()
+
+
+class EditCourseSG(StatesGroup):
+    """Группа состояний aiogram процесса редактирования курса"""
+    choose_course = State()
+    choose_action = State()
+    edit_name = State()
+    edit_description = State()

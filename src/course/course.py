@@ -26,10 +26,20 @@ class Course(ABC):
         """Название курса"""
         pass
 
-    @name.setter
     @abstractmethod
-    async def name(self, value) -> None:
+    async def set_name(self, value) -> None:
         """Изменить название курса"""
+        pass
+
+    @property
+    @abstractmethod
+    async def description(self) -> str:
+        """Описание курса"""
+        pass
+
+    @abstractmethod
+    async def set_description(self, value) -> None:
+        """Изменить описание курса"""
         pass
 
     @property
