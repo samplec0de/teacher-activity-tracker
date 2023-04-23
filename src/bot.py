@@ -1346,11 +1346,9 @@ async def callback_edit_lesson_choose_lesson(callback_query: CallbackQuery, stat
     lesson_id = int(callback_query.data.split('_')[1])
     await state.update_data(lesson_id=lesson_id)
     kb_edit_lesson = InlineKeyboardMarkup()
-    kb_edit_lesson.add(
-        InlineKeyboardButton("Изменить тему", callback_data=f'edit_topic'),
-        InlineKeyboardButton("Изменить период", callback_data=f'edit_period'),
-    )
-    await callback_query.message.reply("Выберите действие:", reply_markup=kb_edit_lesson)
+    kb_edit_lesson.add(InlineKeyboardButton("Тему", callback_data=f'edit_topic'))
+    kb_edit_lesson.add(InlineKeyboardButton("Период сбора активности", callback_data=f'edit_period'))
+    await callback_query.message.reply("Что бы вы хотели изменить?", reply_markup=kb_edit_lesson)
     await state.set_state(EditLessonSG.choose_action)
 
 
