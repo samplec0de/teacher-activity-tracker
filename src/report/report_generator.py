@@ -194,9 +194,8 @@ if __name__ == '__main__':
     import bot
 
     async def main():
-        cf = await bot.get_course_factory()
         generator = ReportGenerator(
-            course_factory=cf,
+            course_factory=await bot.get_course_factory(),
             teacher_tg_link=TeacherTelegramLink(bot=bot.bot),
             teacher_activity_link=PGTeacherActivityLink(await get_pool()),
             course_teacher_link=CourseTeacherLink(await get_pool()),
