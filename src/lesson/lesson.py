@@ -22,9 +22,8 @@ class Lesson(ABC):
         """Тема урока"""
         pass
 
-    @topic.setter
     @abstractmethod
-    async def topic(self, value: str) -> None:
+    async def set_topic(self, value: str) -> None:
         """Изменение темы урока"""
         pass
 
@@ -42,9 +41,8 @@ class Lesson(ABC):
         """Дата начала сбора активности по уроку"""
         pass
 
-    @date_from.setter
     @abstractmethod
-    async def date_from(self, new_date) -> None:
+    async def set_date_from(self, new_date) -> None:
         """Изменение даты начала сбора активности по уроку"""
         pass
 
@@ -54,9 +52,8 @@ class Lesson(ABC):
         """Дедлайн сбора активности по уроку"""
         pass
 
-    @date_to.setter
     @abstractmethod
-    async def date_to(self, new_date) -> None:
+    async def set_date_to(self, new_date) -> None:
         """Изменение дедлайна сбора активности по уроку"""
         pass
 

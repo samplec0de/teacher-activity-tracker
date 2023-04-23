@@ -17,24 +17,21 @@ class PGLesson(PGObject, Lesson):
     async def date_from(self) -> datetime.datetime:
         return await self._get_single_attribute('date_from')
 
-    @date_from.setter
-    async def date_from(self, value) -> None:
+    async def set_date_from(self, value) -> None:
         await self._set_single_attribute('date_from', value)
 
     @property
     async def date_to(self) -> datetime.datetime:
         return await self._get_single_attribute('date_to')
 
-    @date_to.setter
-    async def date_to(self, value) -> None:
+    async def set_date_to(self, value) -> None:
         await self._set_single_attribute('date_to', value)
 
     @property
     async def topic(self) -> str:
         return await self._get_single_attribute('topic')
 
-    @topic.setter
-    async def topic(self, value: str) -> None:
+    async def set_topic(self, value: str) -> None:
         await self._set_single_attribute('topic', value)
 
     @property

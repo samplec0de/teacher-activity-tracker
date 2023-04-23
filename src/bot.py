@@ -26,7 +26,7 @@ from links.teacher_telegram_link import TeacherTelegramLink
 from middleware import TypingMiddleware, FSMFinishMiddleware
 from report.excel.excel_report_generator import ReportGenerator
 from state_groups import MarkActivitySG, AddCourseSG, AddLessonSG, AddActivitySG, AddJoinCodeSG, RemoveCourseSG, \
-    RemoveLessonSG, RemoveActivitySG, JoinCodesListSG, RemoveJoinCodeSG, ReportSG, EditCourseSG
+    RemoveLessonSG, RemoveActivitySG, JoinCodesListSG, RemoveJoinCodeSG, ReportSG, EditCourseSG, EditLessonSG
 from teacher.teacher import Teacher
 
 logging.basicConfig(level=logging.INFO)
@@ -483,48 +483,59 @@ async def msg_set_lesson_topic(message: Message, state: FSMContext):
     await state.set_state(AddLessonSG.choose_period)
 
 
+async def parse_dates(message: Message) -> List[datetime.date]:
+    """Парсит даты из сообщения"""
+    dates = re.sub(r"\s", '', message.text).split(admin_client.constants.PERIOD_DELIMITER)
+    if len(dates) < 2:
+        await message.answer(
+            "❗ К сожалению, мне не удалось распознать период. Возможно, вы забыли знак минуса между датами или "
+            "написали только одну дату. Пожалуйста, попробуйте заново. "
+            f"Укажите {md.hbold('2')} даты в формате ДД.ММ.ГГГГ, разделенные знаком минуса, например "
+            f"{md.hcode('10.03.2023-15.03.2023')}",
+            parse_mode=ParseMode.HTML
+        )
+        return []
+    elif len(dates) > 2:
+        await message.answer(
+            "❗ К сожалению, мне не удалось распознать период. Ваше сообщение содержит больше одного знака минуса. "
+            "Пожалуйста, попробуйте заново. "
+            f"Укажите {md.hbold('2')} даты в формате ДД.ММ.ГГГГ, разделенные знаком минуса, например "
+            f"{md.hcode('10.03.2023-15.03.2023')}",
+            parse_mode=ParseMode.HTML
+        )
+        return []
+    else:
+        dates_parsed = []
+        for date, date_kind in zip(dates, ("начала", "конца")):
+            try:
+                dates_parsed.append(datetime.datetime.strptime(date, admin_client.constants.DATE_FORMAT))
+            except ValueError:
+                await message.answer(
+                    f"❗ К сожалению, мне не удалось распознать дату {date_kind} \"{date}\" "
+                    "Пожалуйста, попробуйте указать период заново. Обратите внимание - формат даты ДД.ММ.ГГГГ. "
+                    f"Например, {md.hcode('10.03.2023-15.03.2023')}",
+                    parse_mode=ParseMode.HTML
+                )
+                return []
+        if dates_parsed[1] < dates_parsed[0]:
+            await message.answer(
+                f"❗ Дата завершения раньше даты начала, укажите период заново!",
+                parse_mode=ParseMode.HTML
+            )
+            return []
+        return dates_parsed
+
+
 @dp.message_handler(state=AddLessonSG.choose_period)
 @only_for_manager
 async def msg_set_lesson_period(message: Message, state: FSMContext):
     """Пользователь прислал период сбора активности по уроку"""
     async with state.proxy() as data:
-        dates = re.sub(r"\s", '', message.text).split(admin_client.constants.PERIOD_DELIMITER)
-        if len(dates) < 2:
-            await message.answer(
-                "❗ К сожалению, мне не удалось распознать период. Возможно, вы забыли знак минуса между датами или "
-                "написали только одну дату. Пожалуйста, попробуйте заново. "
-                f"Укажите {md.hbold('2')} даты в формате ДД.ММ.ГГГГ, разделенные знаком минуса, например "
-                f"{md.hcode('10.03.2023-15.03.2023')}",
-                parse_mode=ParseMode.HTML
-            )
-        elif len(dates) > 2:
-            await message.answer(
-                "❗ К сожалению, мне не удалось распознать период. Ваше сообщение содержит больше одного знака минуса. "
-                "Пожалуйста, попробуйте заново. "
-                f"Укажите {md.hbold('2')} даты в формате ДД.ММ.ГГГГ, разделенные знаком минуса, например "
-                f"{md.hcode('10.03.2023-15.03.2023')}",
-                parse_mode=ParseMode.HTML
-            )
-        else:
-            dates_parsed = []
-            for date, date_kind in zip(dates, ("начала", "конца")):
-                try:
-                    dates_parsed.append(datetime.datetime.strptime(date, admin_client.constants.DATE_FORMAT))
-                except ValueError:
-                    await message.answer(
-                        f"❗ К сожалению, мне не удалось распознать дату {date_kind} \"{date}\" "
-                        "Пожалуйста, попробуйте указать период заново. Обратите внимание - формат даты ДД.ММ.ГГГГ. "
-                        f"Например, {md.hcode('10.03.2023-15.03.2023')}",
-                        parse_mode=ParseMode.HTML
-                    )
-                    return
-            if dates_parsed[1] < dates_parsed[0]:
-                await message.answer(
-                    f"❗ Дата завершения раньше даты начала, укажите период заново!",
-                    parse_mode=ParseMode.HTML
-                )
-                return
-            data["lesson_dates"] = dates_parsed
+        result = await parse_dates(message=message)
+        if not result:
+            return
+        data["lesson_dates"] = result
+
 
         lf = await get_lesson_factory()
         date_from, date_to = data["lesson_dates"]
@@ -1305,6 +1316,94 @@ async def edit_course_description(message: Message, state: FSMContext):
     course = await (await get_course_factory()).load(course_id=course_id)
     await course.set_description(message.text)
     await message.reply(f"Описание курса изменено:\n{md.hcode(message.text)}", parse_mode=ParseMode.HTML)
+    await state.finish()
+
+
+@dp.message_handler(Command("edit_lesson"))
+@only_for_manager
+async def cmd_edit_lesson(message: Message, state: FSMContext):
+    """Команда редактирования урока /edit_lesson"""
+    await choose_course(message)
+    await state.set_state(EditLessonSG.choose_course)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^course_\d+$', c.data), state=EditLessonSG.choose_course)
+@only_for_manager
+async def callback_edit_lesson_choose_course(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь выбрал курс для редактирования урока"""
+    await callback_query.answer()
+    course_id = int(callback_query.data.split('_')[1])
+    await state.update_data(course_id=course_id)
+    await choose_lesson(callback_query)
+    await state.set_state(EditLessonSG.choose_lesson)
+
+
+@dp.callback_query_handler(lambda c: re.match(r'^lesson_\d+$', c.data), state=EditLessonSG.choose_lesson)
+@only_for_manager
+async def callback_edit_lesson_choose_lesson(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь выбрал урок для редактирования"""
+    await callback_query.answer()
+    lesson_id = int(callback_query.data.split('_')[1])
+    await state.update_data(lesson_id=lesson_id)
+    kb_edit_lesson = InlineKeyboardMarkup()
+    kb_edit_lesson.add(
+        InlineKeyboardButton("Изменить тему", callback_data=f'edit_topic'),
+        InlineKeyboardButton("Изменить период", callback_data=f'edit_period'),
+    )
+    await callback_query.message.reply("Выберите действие:", reply_markup=kb_edit_lesson)
+    await state.set_state(EditLessonSG.choose_action)
+
+
+@dp.callback_query_handler(
+    lambda c: re.match(r'^(edit_topic|edit_period)$', c.data), state=EditLessonSG.choose_action
+)
+@only_for_manager
+async def callback_edit_lesson_action(callback_query: CallbackQuery, state: FSMContext):
+    """Пользователь выбрал действие для редактирования урока"""
+    await callback_query.answer()
+    action = callback_query.data
+    lesson_id = (await state.get_data())['lesson_id']
+    lesson = await (await get_lesson_factory()).load(lesson_id=lesson_id)
+    period = f'{(await lesson.date_from).strftime("%d.%m.%Y")}-{(await lesson.date_to).strftime("%d.%m.%Y")}'
+    info_msg = md.text(
+        md.text("Тема: ", md.hbold(await lesson.topic)),
+        md.text("Период сбора активности: ", md.hcode(period)),
+        sep='\n',
+    )
+    await callback_query.message.reply(info_msg, parse_mode=ParseMode.HTML)
+    if action == 'edit_topic':
+        await callback_query.message.reply("Введите новую тему урока:")
+        await state.set_state(EditLessonSG.edit_topic)
+    elif action == 'edit_period':
+        await callback_query.message.reply("Введите новый период сбора активности:")
+        await state.set_state(EditLessonSG.edit_period)
+
+
+@dp.message_handler(state=EditLessonSG.edit_topic)
+@only_for_manager
+async def edit_lesson_topic(message: Message, state: FSMContext):
+    """Пользователь ввел новую тему урока"""
+    lesson_id = (await state.get_data())['lesson_id']
+    lesson = await (await get_lesson_factory()).load(lesson_id=lesson_id)
+    await lesson.set_topic(message.text)
+    await message.reply(f"Тема урока изменена:\n{md.hbold(message.text)}", parse_mode=ParseMode.HTML)
+    await state.finish()
+
+
+@dp.message_handler(state=EditLessonSG.edit_period)
+@only_for_manager
+async def edit_lesson_period(message: Message, state: FSMContext):
+    """Пользователь ввел новый период сбора активности"""
+    result = await parse_dates(message=message)
+    if not result:
+        return
+    lesson_id = (await state.get_data())['lesson_id']
+    lesson = await (await get_lesson_factory()).load(lesson_id=lesson_id)
+    date_from, date_to = result
+    await lesson.set_date_from(date_from)
+    await lesson.set_date_to(date_to)
+    period = f'{(await lesson.date_from).strftime("%d.%m.%Y")}-{(await lesson.date_to).strftime("%d.%m.%Y")}'
+    await message.reply(f"Период сбора активности изменен:\n{md.hcode(period)}", parse_mode=ParseMode.HTML)
     await state.finish()
 
 
