@@ -1,4 +1,5 @@
-from typing import List, Iterable
+import datetime
+from typing import List, Iterable, Optional
 
 import openpyxl as openpyxl
 from openpyxl.styles import PatternFill, Side
@@ -63,6 +64,7 @@ class ReportGenerator:
         teachers = await self._course_teacher_link.get_teachers_for_course(course)
         lessons = await course.lessons
 
+        await self.add_report_info(sheet=sheet, course=course)
         await self.add_teacher_info(sheet=sheet, teachers=teachers)
         await self.add_lesson_number(sheet=sheet, lessons=lessons)
         await self.add_lesson_info(sheet=sheet, lessons=lessons)
@@ -70,7 +72,7 @@ class ReportGenerator:
         await self.add_teacher_activity_info(sheet=sheet, teachers=teachers, lessons=lessons)
 
     def format_column(
-            self, sheet: Worksheet, row: int, column: int, value: str, width: int
+            self, sheet: Worksheet, row: int, column: int, value: str, width: Optional[int] = None
     ) -> None:
         """Форматирование ячейки в заголовке
 
@@ -78,14 +80,36 @@ class ReportGenerator:
         :param row: Номер строки
         :param column: Номер столбца
         :param value: Значение
-        :param width: Ширина столбца
+        :param width: Новая ширина столбца
         """
         cell = sheet.cell(row=row, column=column)
         cell.value = value
         cell.font = openpyxl.styles.Font(bold=True)
         cell.alignment = openpyxl.styles.Alignment('center', wrap_text=True)
         cell.border = openpyxl.styles.Border(**self.ALL_BORDERS)
-        sheet.column_dimensions[get_column_letter(column)].width = width
+        if width is not None:
+            sheet.column_dimensions[get_column_letter(column)].width = width
+
+    @staticmethod
+    async def add_report_info(sheet: Worksheet, course: Course) -> None:
+        """Заполнение первой строки датой генерации отчета"""
+        date_cell = sheet.cell(row=1, column=1)
+        date_cell.value = 'Дата:'
+        date_cell.font = openpyxl.styles.Font(bold=True)
+        current_datetime = datetime.datetime.now()
+        date_value_cell = sheet.cell(row=1, column=2)
+        date_value_cell.value = current_datetime
+        date_value_cell.number_format = "DD.MM.YYYY HH:MM"
+        date_value_cell.alignment = openpyxl.styles.Alignment('left')
+
+        desc_cell = sheet.cell(row=2, column=1)
+        desc_cell.value = 'Описание курса:'
+        desc_cell.font = openpyxl.styles.Font(bold=True)
+        desc_cell.alignment = openpyxl.styles.Alignment(wrap_text=True)
+        desc_value_cell = sheet.cell(row=2, column=2)
+        desc_value_cell.value = await course.description
+        desc_value_cell.alignment = openpyxl.styles.Alignment('left', vertical='center')
+        sheet.merge_cells(start_row=2, start_column=2, end_row=2, end_column=3)
 
     async def add_teacher_info(self, sheet: Worksheet, teachers: List[Teacher]) -> None:
         """Заполнение первой строки именами преподавателей и их телеграм-логинами
@@ -95,7 +119,7 @@ class ReportGenerator:
         """
         for idx, teacher in enumerate(teachers):
             column_number = idx + 4
-            cell = sheet.cell(row=1, column=column_number)
+            cell = sheet.cell(row=3, column=column_number)
             full_name = await self._teacher_tg_link.get_full_name(teacher)
             username = await self._teacher_tg_link.get_username(teacher)
             username_pretty = f"@{username}" if username else ""
@@ -111,8 +135,8 @@ class ReportGenerator:
         :param sheet: Лист Excel
         :param lessons: Список уроков
         """
-        self.format_column(sheet=sheet, row=1, column=1, value='№', width=5)
-        l_idx = 2
+        self.format_column(sheet=sheet, row=3, column=1, value='№', width=None)
+        l_idx = 4
         for lesson_num, lesson in enumerate(lessons):
             lesson_num_cell = sheet.cell(row=l_idx, column=1)
             lesson_num_cell.value = lesson_num + 1
@@ -129,8 +153,8 @@ class ReportGenerator:
         :param sheet: Лист Excel
         :param lessons: Список уроков
         """
-        self.format_column(sheet=sheet, row=1, column=2, value='Урок', width=25)
-        l_idx = 2
+        self.format_column(sheet=sheet, row=3, column=2, value='Урок', width=25)
+        l_idx = 4
         for lesson_num, lesson in enumerate(lessons):
             # Заполнение темы урока во втором столбце
             lesson_cell = sheet.cell(row=l_idx, column=2)
@@ -149,8 +173,8 @@ class ReportGenerator:
         :param sheet: Лист Excel
         :param lessons: Список уроков
         """
-        self.format_column(sheet=sheet, row=1, column=3, value='Активность', width=25)
-        l_idx = 2
+        self.format_column(sheet=sheet, row=3, column=3, value='Активность', width=25)
+        l_idx = 4
         for lesson_num, lesson in enumerate(lessons):
             activities = await lesson.activities
             for a_idx, activity in enumerate(activities):
@@ -169,7 +193,7 @@ class ReportGenerator:
         :param lessons: Список уроков
         :param teachers: Список преподавателей
         """
-        l_idx = 2
+        l_idx = 4
         for lesson_num, lesson in enumerate(lessons):
 
             activities = await lesson.activities
