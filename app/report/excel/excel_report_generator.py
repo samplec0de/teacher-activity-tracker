@@ -138,12 +138,15 @@ class ReportGenerator:
         self.format_column(sheet=sheet, row=3, column=1, value='№', width=None)
         l_idx = 4
         for lesson_num, lesson in enumerate(lessons):
+            activities = await lesson.activities
+            if not activities:
+                continue
             lesson_num_cell = sheet.cell(row=l_idx, column=1)
             lesson_num_cell.value = lesson_num + 1
             lesson_num_cell.font = openpyxl.styles.Font(bold=True)
             lesson_num_cell.alignment = openpyxl.styles.Alignment(vertical='center', horizontal='center')
             lesson_num_cell.border = openpyxl.styles.Border(**self.ALL_BORDERS)
-            l_idx_new = l_idx + len(await lesson.activities)
+            l_idx_new = l_idx + len(activities)
             sheet.merge_cells(start_row=l_idx, start_column=1, end_row=l_idx_new - 1, end_column=1)
             l_idx = l_idx_new
 
@@ -156,14 +159,16 @@ class ReportGenerator:
         self.format_column(sheet=sheet, row=3, column=2, value='Урок', width=25)
         l_idx = 4
         for lesson_num, lesson in enumerate(lessons):
-            # Заполнение темы урока во втором столбце
+            activities = await lesson.activities
+            if not activities:
+                continue
             lesson_cell = sheet.cell(row=l_idx, column=2)
-            lesson_cell.value = await lesson.topic
+            lesson_cell.value = await lesson.topic or 'Тема не указана'
             lesson_cell.font = openpyxl.styles.Font(bold=True)
             lesson_cell.alignment = openpyxl.styles.Alignment(vertical='center', wrap_text=True)
             lesson_cell.fill = self.FILL_COLORS[lesson_num % len(self.FILL_COLORS)]
             lesson_cell.border = openpyxl.styles.Border(**self.ALL_BORDERS)
-            l_idx_new = l_idx + len(await lesson.activities)
+            l_idx_new = l_idx + len(activities)
             sheet.merge_cells(start_row=l_idx, start_column=2, end_row=l_idx_new - 1, end_column=2)
             l_idx = l_idx_new
 
