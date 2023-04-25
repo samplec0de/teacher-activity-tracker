@@ -18,7 +18,7 @@ Teacher Activity Tracker - это проект, созданный для авт
 git clone https://github.com/samplec0de/teacher-activity-tracker.git
 cd teacher-activity-tracker
 ```
-3. Создайте файл bot.env в корневой папке проекта и добавьте в него строки
+3. Заполните файл bot.env в корневой папке проекта
 ```
 BOT_TOKEN=токен вашего бота от BotFather
 ADMIN_PASSWORD=пароль администратора
@@ -59,3 +59,10 @@ docker-compose up -d
 ## Структура пакетов
 
 ![packages.png](assets/packages.png)
+
+## Third-Party Dependencies:
+
+- asyncpg: Copyright (c) 2016-present the asyncpg authors and contributors
+- aiogram: Copyright (c) 2019 Alex Root Junior
+- openpyxl: Copyright (c) 2010 openpyxl
+- aiocron: Copyright (c) 2016 Gael Pasgrimaud
