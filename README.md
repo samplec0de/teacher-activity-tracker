@@ -65,6 +65,13 @@ docker-compose up -d
 
 ![packages.png](assets/packages.png)
 
+## Планы по развитию
+1. Хранить состояния FSMContext в Redis
+2. Добавить генерацию "сырого" лога активностей преподавателей, где будут видны, в том числе их комментарии
+3. Добавить бинарный тип активности
+4. Добавить функционал уведомления о добавлении активности (писать в топик Kafka)
+5. Добавить запрет на добавление активностей после дедлайна
+
 ## Third-Party Dependencies:
 
 - asyncpg: Copyright (c) 2016-present the asyncpg authors and contributors
