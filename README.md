@@ -10,6 +10,11 @@ Teacher Activity Tracker - это проект, созданный для авт
 - Создание сводных отчетов по активностям преподавателей в формате Excel
 - Напоминания о предстоящем сборе информации об активностях перед окончанием срока
 
+## Демо-видео
+https://www.youtube.com/watch?v=tIeZT2bn3w8
+[![Демо видео](https://img.youtube.com/vi/tIeZT2bn3w8/0.jpg)](https://www.youtube.com/watch?v=tIeZT2bn3w8)
+
+
 ## Установка
 
 1. Установите Docker и Docker Compose.
