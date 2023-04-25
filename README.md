@@ -17,6 +17,10 @@ Teacher Activity Tracker - это проект, созданный для авт
 https://www.youtube.com/watch?v=tIeZT2bn3w8
 [![Демо видео](https://img.youtube.com/vi/tIeZT2bn3w8/0.jpg)](https://www.youtube.com/watch?v=tIeZT2bn3w8)
 
+## Документация
+Часть комлпекта документов по ГОСТ ЕСПД, оформленных в рамках курсовой работы, находится в папке `docs`.
+
+Документация по ГОСТ не поддерживается и актуальна только для версии 1.0.0.
 
 ## Установка
 
